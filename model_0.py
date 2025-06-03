@@ -7,7 +7,9 @@ import pandas as pd
 import sys
 
 class Environment():
-    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, omega_0=0.4, alpha_omega=0.3, gamma_omega=0.1, reward_schedule=1.0):
+    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001,
+                 alpha_plus=0.4, alpha_minus=0.5, gamma_u=0.6,
+                 omega_0=0.4, alpha_omega=0.3, gamma_omega=0.1, reward_schedule=1.0):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
         self.rng = np.random.RandomState(seed=seed)
@@ -15,6 +17,9 @@ class Environment():
         self.t_cue = t_cue
         self.t_reward = t_reward
         self.dt = dt
+        self.alpha_plus = alpha_plus
+        self.alpha_minus = alpha_minus
+        self.gamma_u = gamma_u
         self.omega_0 = omega_0
         self.alpha_omega = alpha_omega
         self.gamma_omega = gamma_omega
@@ -23,6 +28,8 @@ class Environment():
         self.location = [0,0]  # [left=-1, right=1]
         self.omega = omega_0    # 0 to 1; 0.5 is equal arbitration
         self.reward = [0,0]
+        self.alpha = [0,0]
+        self.gamma = [0,0]
         self.action = [0,0]
         self.v_chosen = [0,0]
         self.feedback_phase = 0
@@ -34,6 +41,8 @@ class Environment():
         self.letter  = [-1, 1] if (left=='A' and right=='B') else [1, -1]
         self.location = [-1, 1]
         self.reward = [0,0]
+        self.alpha = [0,0]
+        self.gamma = [0,0]
         self.action = [1,1]  # prevents learning during cue phase
         self.v_chosen = [0,0]
         self.cue_phase = 1
@@ -44,11 +53,7 @@ class Environment():
         act = sim.data[net.p_action][-1]
         self.action = [1, 0] if act[0]>act[1] else [0,1]
     def set_omega(self, sim, net):
-        chosen = 0 if self.action==[1,0] else 1
-        probe_value = net.p_value_left if chosen==0 else net.p_value_right
-        v_c_letter = sim.data[probe_value][-1,0]
-        v_c_location = sim.data[probe_value][-1,1]
-        delta_reliability = v_c_letter - v_c_location
+        delta_reliability = self.v_chosen[0] - self.v_chosen[1]
         if delta_reliability > 0:
             self.omega += delta_reliability * self.alpha_omega * (1 - self.omega)  + self.gamma_omega * (self.omega_0 - self.omega)
         else:
@@ -58,33 +63,48 @@ class Environment():
         correct = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
         if self.action==[1,0]:
             if correct=='left':
-                if self.rng.uniform(0,1) < self.reward_schedule:  
-                    self.reward = [1,0]  # yes rewarded for picking the better option
-                else:
-                    self.reward = [-1,0]  # not rewarded for picking the better option
+                if self.rng.uniform(0,1) < self.reward_schedule:    # yes rewarded for picking the better option
+                    self.reward = [1,0]
+                    self.alpha = [self.alpha_plus,0]
+                    self.gamma = [0,self.gamma_u]
+                else:                                               # not rewarded for picking the better option
+                    self.reward = [-1,0]
+                    self.alpha = [self.alpha_minus,0]
+                    self.gamma = [0,self.gamma_u]
             else:
-                if self.rng.uniform(0,1) < 1-self.reward_schedule:  
-                    self.reward = [1,0]  # yes rewarded for picking the worse option
-                else:
-                    self.reward = [-1,0]  # not rewarded for picking the worse option
+                if self.rng.uniform(0,1) < 1-self.reward_schedule:  # yes rewarded for picking the worse option 
+                    self.reward = [1,0]
+                    self.alpha = [self.alpha_plus,0]
+                    self.gamma = [0,self.gamma_u]
+                else:                                               # not rewarded for picking the worse option
+                    self.reward = [-1,0]
+                    self.alpha = [self.alpha_minus,0]
+                    self.gamma = [0,self.gamma_u]
         else:
             if correct=='right':
-                if self.rng.uniform(0,1) < self.reward_schedule:  
-                    self.reward = [0,1]  # yes rewarded for picking the better option
-                else:
-                    self.reward = [0,-1]  # not rewarded for picking the better option
+                if self.rng.uniform(0,1) < self.reward_schedule:    # yes rewarded for picking the better option
+                    self.reward = [0,1]
+                    self.alpha = [0, self.alpha_plus]
+                    self.gamma = [self.gamma_u,0]
+                else:                                               # not rewarded for picking the better option
+                    self.reward = [0,-1]  
+                    self.alpha = [0, self.alpha_minus]
+                    self.gamma = [self.gamma_u,0]
             else:
-                if self.rng.uniform(0,1) < 1-self.reward_schedule:  
-                    self.reward = [0,1]  # yes rewarded for picking the worse option
-                else:
-                    self.reward = [0,-1]  # not rewarded for picking the worse option            
+                if self.rng.uniform(0,1) < 1-self.reward_schedule:  # yes rewarded for picking the worse option
+                    self.reward = [0,1] 
+                    self.alpha = [0, self.alpha_plus]
+                    self.gamma = [self.gamma_u,0]
+                else:                                               # not rewarded for picking the worse option   
+                    self.reward = [0,-1]           
+                    self.alpha = [0, self.alpha_minus]
+                    self.gamma = [self.gamma_u,0]
         self.cue_phase = 0
         self.feedback_phase = 1
     def set_v_chosen(self, sim, net):
         chosen = 0 if self.action==[1,0] else 1
-        probe_value = net.p_value_left if chosen==0 else net.p_value_right
-        v_c_letter = sim.data[probe_value][-1,0]
-        v_c_location = sim.data[probe_value][-1,1]
+        v_c_letter = sim.data[net.p_value_letter][-1,chosen]
+        v_c_location = sim.data[net.p_value_location][-1,chosen]
         self.v_chosen = [v_c_letter, v_c_location]
     def sample_letter(self, t):
         return self.letter
@@ -94,6 +114,10 @@ class Environment():
         return self.omega
     def sample_reward(self, t):
         return self.reward
+    def sample_alpha(self, t):
+        return self.alpha
+    def sample_gamma(self, t):
+        return self.gamma
     def sample_action(self, t):
         return self.action
     def sample_unchosen(self, t):
@@ -102,7 +126,6 @@ class Environment():
         return [self.cue_phase, self.feedback_phase]
     def sample_v_chosen(self, t):
         return [self.v_chosen[0], self.v_chosen[1]]
-
 
 def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
     net = nengo.Network(seed=seed_network)
@@ -118,6 +141,8 @@ def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
         in_location = nengo.Node(lambda t: env.sample_location(t))
         in_omega = nengo.Node(lambda t: env.omega_0)
         in_reward = nengo.Node(lambda t: env.sample_reward(t))
+        in_alpha = nengo.Node(lambda t: env.sample_alpha(t))
+        in_gamma = nengo.Node(lambda t: env.sample_gamma(t))
         in_phase = nengo.Node(lambda t: env.sample_phase(t))
         in_unchosen = nengo.Node(lambda t: env.sample_unchosen(t))
         in_v_chosen = nengo.Node(lambda t: env.sample_v_chosen(t))
@@ -128,13 +153,16 @@ def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
         letter = nengo.Ensemble(n_neurons, 2, radius=2)
         location = nengo.Ensemble(n_neurons, 2, radius=2)
         omega = nengo.Ensemble(n_neurons, 1)
-        value_left = nengo.Ensemble(n_neurons, 3, radius=3)
-        value_right = nengo.Ensemble(n_neurons, 3, radius=3)
-        weighted_value_left = nengo.Ensemble(n_neurons, 1)
-        weighted_value_right = nengo.Ensemble(n_neurons, 1)
+        value_letter = nengo.Ensemble(n_neurons, 3, radius=3)
+        value_location = nengo.Ensemble(n_neurons, 3, radius=3)
+        value_left = nengo.Ensemble(n_neurons, 1)
+        value_right = nengo.Ensemble(n_neurons, 1)
         reward = nengo.Ensemble(n_neurons, 2)
+        alpha = nengo.Ensemble(n_neurons, 2)
+        gamma = nengo.Ensemble(n_neurons, 2)
         action = nengo.Ensemble(n_neurons, 2)
-        error = nengo.Ensemble(n_neurons, 2)
+        error = nengo.Ensemble(n_neurons, 4, radius=3)
+        decay = nengo.Ensemble(n_neurons, 4, radius=3)
         load = nengo.Ensemble(n_neurons, 1)
         relax = nengo.Ensemble(n_neurons, 1)
         diff = nengo.Ensemble(n_neurons, 3, radius=2)
@@ -143,6 +171,8 @@ def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
         nengo.Connection(in_letter, letter, synapse=None)
         nengo.Connection(in_location, location, synapse=None)
         nengo.Connection(in_reward, reward, synapse=None)
+        nengo.Connection(in_alpha, alpha, synapse=None)
+        nengo.Connection(in_gamma, gamma, synapse=None)
 
         nengo.Connection(in_omega, load)
         nengo.Connection(in_omega, relax)
@@ -164,47 +194,64 @@ def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
         nengo.Connection(diff, diff_output, function=lambda x: x[0]*(x[1]-x[2]))
         nengo.Connection(in_phase[0], diff.neurons, transform=inh_feedback)
         
-        c0 = nengo.Connection(letter[0], value_left[0], transform=0, learning_rule_type=pes)
-        c1 = nengo.Connection(letter[1], value_right[0], transform=0, learning_rule_type=pes)
-        c2 = nengo.Connection(location[0], value_left[1], transform=0, learning_rule_type=pes)
-        c3 = nengo.Connection(location[1], value_right[1], transform=0, learning_rule_type=pes)
-        nengo.Connection(omega, value_left[2])
-        nengo.Connection(omega, value_right[2])
+        c0 = nengo.Connection(letter[0], value_letter[0], transform=0, learning_rule_type=pes)
+        c1 = nengo.Connection(letter[1], value_letter[1], transform=0, learning_rule_type=pes)
+        c2 = nengo.Connection(location[0], value_location[0], transform=0, learning_rule_type=pes)
+        c3 = nengo.Connection(location[1], value_location[1], transform=0, learning_rule_type=pes)
+        nengo.Connection(omega, value_letter[2])
+        nengo.Connection(omega, value_location[2])
 
-        nengo.Connection(value_left, weighted_value_left, function=lambda x: x[0]*x[2])
-        nengo.Connection(value_left, weighted_value_left, function=lambda x: x[1]*(1-x[2]))
-        nengo.Connection(value_right, weighted_value_right, function=lambda x: x[0]*x[2])
-        nengo.Connection(value_right, weighted_value_right, function=lambda x: x[1]*(1-x[2]))
+        nengo.Connection(value_letter, value_left, function=lambda x: x[0]*x[2])
+        nengo.Connection(value_location, value_left, function=lambda x: x[0]*(1-x[2]))
+        nengo.Connection(value_letter, value_right, function=lambda x: x[1]*x[2])
+        nengo.Connection(value_location, value_right, function=lambda x: x[1]*(1-x[2]))
         
-        nengo.Connection(weighted_value_left, action[0], transform=k)
-        nengo.Connection(weighted_value_right, action[1], transform=k)
+        nengo.Connection(value_left, action[0], transform=k)
+        nengo.Connection(value_right, action[1], transform=k)
         nengo.Connection(action, action, transform=w_fb, synapse=0.1)
 
         nengo.Connection(in_phase[0], error.neurons, transform=inh_feedback, synapse=None)
+        nengo.Connection(in_phase[0], decay.neurons, transform=inh_feedback, synapse=None)
         nengo.Connection(in_phase[1], action.neurons, transform=inh_feedback, synapse=None)
-        nengo.Connection(in_unchosen[0], value_left.neurons, transform=inh_feedback, synapse=None)
-        nengo.Connection(in_unchosen[1], value_right.neurons, transform=inh_feedback, synapse=None)
 
-        nengo.Connection(reward, error, transform=+1)
-        nengo.Connection(value_left[0], error[0], transform=-1)
-        nengo.Connection(value_left[1], error[0], transform=-1)
-        nengo.Connection(value_right[0], error[1], transform=-1)
-        nengo.Connection(value_right[1], error[1], transform=-1)
+        nengo.Connection(value_letter[0], error[0], transform=-1)
+        nengo.Connection(value_letter[1], error[1], transform=-1)
+        nengo.Connection(value_location[0], error[0], transform=-1)
+        nengo.Connection(value_location[1], error[1], transform=-1)
+        nengo.Connection(reward[0], error[0], transform=+1)
+        nengo.Connection(reward[1], error[1], transform=+1)
+        nengo.Connection(alpha[0], error[2])
+        nengo.Connection(alpha[1], error[3])
 
-        nengo.Connection(error[0], c0.learning_rule, transform=-1)
-        nengo.Connection(error[0], c2.learning_rule, transform=-1)
-        nengo.Connection(error[1], c1.learning_rule, transform=-1)
-        nengo.Connection(error[1], c3.learning_rule, transform=-1)
+        nengo.Connection(error, c0.learning_rule, function=lambda x: -x[0]*x[2])
+        nengo.Connection(error, c2.learning_rule, function=lambda x: -x[0]*x[2])
+        nengo.Connection(error, c1.learning_rule, function=lambda x: -x[1]*x[3])
+        nengo.Connection(error, c3.learning_rule, function=lambda x: -x[1]*x[3])
+
+        nengo.Connection(value_letter[0], decay[0], transform=-1)
+        nengo.Connection(value_letter[1], decay[1], transform=-1)
+        nengo.Connection(value_location[0], decay[0], transform=-1)
+        nengo.Connection(value_location[1], decay[1], transform=-1)
+        nengo.Connection(gamma[0], decay[2])
+        nengo.Connection(gamma[1], decay[3])
+
+        nengo.Connection(decay, c0.learning_rule, function=lambda x: -x[0]*x[2])
+        nengo.Connection(decay, c2.learning_rule, function=lambda x: -x[0]*x[2])
+        nengo.Connection(decay, c1.learning_rule, function=lambda x: -x[1]*x[3])
+        nengo.Connection(decay, c3.learning_rule, function=lambda x: -x[1]*x[3])
     
         net.p_letter = nengo.Probe(letter)
         net.p_location = nengo.Probe(location)
+        net.p_value_letter = nengo.Probe(value_letter)
+        net.p_value_location = nengo.Probe(value_location)
         net.p_value_left = nengo.Probe(value_left)
         net.p_value_right = nengo.Probe(value_right)
-        net.p_weighted_value_left = nengo.Probe(weighted_value_left)
-        net.p_weighted_value_right = nengo.Probe(weighted_value_right)
         net.p_reward = nengo.Probe(reward)
         net.p_action = nengo.Probe(action)
+        net.p_alpha = nengo.Probe(alpha)
+        net.p_gamma = nengo.Probe(gamma)
         net.p_error = nengo.Probe(error)
+        net.p_decay = nengo.Probe(decay)
         net.p_delta_rel = nengo.Probe(delta_rel)
         net.p_diff = nengo.Probe(diff)
         net.p_diff_output = nengo.Probe(diff_output)
@@ -228,9 +275,9 @@ def simulate_network(net, blocks=24):
                 env.set_cue(bid, trial)
                 sim.run(env.t_cue)
                 env.set_action(sim, net)
+                env.set_v_chosen(sim, net)
                 env.set_omega(sim, net)
                 env.set_reward(bid, trial)
-                env.set_v_chosen(sim, net)
                 sim.run(env.t_reward)
                 # did they choose the better option?
                 block = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['block'].to_numpy()[0]
