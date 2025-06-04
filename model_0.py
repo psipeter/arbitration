@@ -8,8 +8,8 @@ import sys
 
 class Environment():
     def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001,
-                 alpha_plus=0.4, alpha_minus=0.5, gamma_u=0.6,
-                 omega_0=0.4, alpha_omega=0.3, gamma_omega=0.1, reward_schedule=1.0):
+                 alpha_plus=0.47, alpha_minus=0.44, gamma_u=0.32,
+                 omega_0=0.35, alpha_omega=0.31, gamma_omega=0.09, reward_schedule=0.7):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
         self.rng = np.random.RandomState(seed=seed)
@@ -47,8 +47,8 @@ class Environment():
         self.v_chosen = [0,0]
         self.cue_phase = 1
         self.feedback_phase = 0
-    def set_reward_schedule(self):
-        self.reward_schedule = [0.8, 0.7, 0.6][self.rng.randint(3)]
+    # def set_reward_schedule(self):
+    #     self.reward_schedule = [0.8, 0.7, 0.6][self.rng.randint(3)]
     def set_action(self, sim, net):
         act = sim.data[net.p_action][-1]
         self.action = [1, 0] if act[0]>act[1] else [0,1]
@@ -262,14 +262,14 @@ def build_network(env, n_neurons=1000, seed_network=1, inh=0, k=0.2, a=4e-5):
 
 def simulate_network(net, blocks=24):
     dfs = []
-    columns = ['sid', 'bid', 'reward_schedule', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
+    columns = ['sid', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
     env = net.env
     sid = env.sid
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     with sim:
         sim.run(net.env.t_load)
         for bid in env.empirical.query("sid==@sid")['bid'].unique()[:blocks]:
-            env.set_reward_schedule()
+            # env.set_reward_schedule()
             for trial in env.empirical.query("sid==@sid & bid==@bid")['trial'].unique():
                 print(f"running sid {env.sid}, block {bid}, trial {trial}")
                 env.set_cue(bid, trial)
@@ -291,7 +291,7 @@ def simulate_network(net, blocks=24):
                 reversal_at_trial = env.empirical.query("sid==@sid & bid==@bid")['reversal_at_trial'].unique()[0]
                 trial_before_reversal = trial if trial<reversal_at_trial else None
                 trial_after_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else None
-                dfs.append(pd.DataFrame([[sid, bid, env.reward_schedule, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
+                dfs.append(pd.DataFrame([[sid, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
     data = pd.concat(dfs, ignore_index=True)
     return sim, data
 
