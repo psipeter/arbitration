@@ -7,7 +7,7 @@ import pandas as pd
 import sys
 
 class Environment():
-    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1,
+    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7,
                  alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=0.3, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
