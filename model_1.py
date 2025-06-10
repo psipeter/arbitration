@@ -267,41 +267,36 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
 
     return net
 
-# def simulate_network(net, blocks=24):
-#     dfs = []
-#     columns = ['sid', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
-#     env = net.env
-#     sid = env.sid
-#     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
-#     with sim:
-#         sim.run(net.env.t_load)
-#         for bid in env.empirical.query("sid==@sid")['bid'].unique()[:blocks]:
-#             for trial in env.empirical.query("sid==@sid & bid==@bid")['trial'].unique():
-#                 print(f"running sid {env.sid}, block {bid}, trial {trial}")
-#                 env.set_cue(bid, trial)
-#                 sim.run(env.t_cue)
-#                 env.set_action(sim, net)
-#                 env.set_omega(sim, net)
-#                 env.set_reward(bid, trial)
-#                 sim.run(env.t_reward)
-#                 block = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['block'].to_numpy()[0]
-#                 correct = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
-#                 if (env.action==[1,0] and correct=='left') or (env.action==[0,1] and correct=='right'):
-#                     accuracy = 1
-#                 else:
-#                     accuracy = 0
-#                 reversal_at_trial = env.empirical.query("sid==@sid & bid==@bid")['reversal_at_trial'].unique()[0]
-#                 trial_before_reversal = trial if trial<reversal_at_trial else None
-#                 trial_after_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else None
-#                 dfs.append(pd.DataFrame([[sid, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
-#     data = pd.concat(dfs, ignore_index=True)
-#     return sim, data
+def simulate_network(net, blocks=24):
+    dfs = []
+    columns = ['sid', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
+    env = net.env
+    sid = env.sid
+    sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
+    with sim:
+        sim.run(net.env.t_load)
+        for bid in env.empirical.query("sid==@sid")['bid'].unique()[:blocks]:
+            for trial in env.empirical.query("sid==@sid & bid==@bid")['trial'].unique():
+                print(f"running sid {env.sid}, block {bid}, trial {trial}")
+                env.set_cue(bid, trial)
+                sim.run(env.t_cue)
+                env.set_action(sim, net)
+                env.set_reward(bid, trial)
+                sim.run(env.t_reward)
+                block = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['block'].to_numpy()[0]
+                correct = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
+                accuracy = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
+                reversal_at_trial = env.empirical.query("sid==@sid & bid==@bid")['reversal_at_trial'].unique()[0]
+                trial_before_reversal = trial if trial<reversal_at_trial else None
+                trial_after_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else None
+                dfs.append(pd.DataFrame([[sid, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
+    data = pd.concat(dfs, ignore_index=True)
+    return sim, data
 
-# if __name__ == "__main__":
-#     sid = int(sys.argv[1])
-#     env = Environment(sid=sid)
-#     net = build_network(env, seed_network=sid)
-#     sim, data = simulate_network(net)
-#     data.to_pickle(f"data/model1_sid{sid}_behavior.pkl")
-#     print(data)
-#     print(data)
+if __name__ == "__main__":
+    sid = int(sys.argv[1])
+    env = Environment(sid=sid)
+    net = build_network(env, seed_network=sid)
+    sim, data = simulate_network(net)
+    data.to_pickle(f"data/model1_sid{sid}_behavior.pkl")
+    print(data)
