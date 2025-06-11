@@ -7,7 +7,7 @@ import pandas as pd
 import sys
 
 class Environment():
-    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7,
+    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1.0,
                  alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=0.3, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
@@ -72,6 +72,8 @@ class Environment():
         self.load_phase = 0
     def sample_letter(self, t):
         return self.letter
+    def sample_letter2(self, t):
+        return [1,0] if self.letter==[1] else [0,1]
     def sample_action(self, t):
         return self.action
     def sample_reward(self, t):
@@ -178,25 +180,6 @@ class EW(nengo.Node):
             dw[1] += -3*(wlr0 - wlr)
         return dw
 
-class VWA(nengo.Node):
-    def __init__(self):
-        self.size_in = 7
-        self.size_out = 2
-        super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
-    def step(self, t, x):
-        va = x[0]
-        vb = x[1]
-        vl = x[2]
-        vr = x[3]
-        wab = x[4]
-        wlr = x[5]
-        letter = x[6]
-        v_letter_l = va if letter==1 else vb
-        v_letter_r = vb if letter==1 else va
-        L = v_letter_l*wab + vl*wlr
-        R = v_letter_r*wab + vr*wlr
-        return [L, R]
-
 def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1e-4):
     net = nengo.Network(seed=seed_network)
     net.env = env
@@ -210,6 +193,7 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         in_f = nengo.Node(env.F)
         in_g = nengo.Node(env.G)
         in_letter = nengo.Node(lambda t: env.sample_letter(t))
+        in_letter2 = nengo.Node(lambda t: env.sample_letter2(t))
         in_action = nengo.Node(lambda t: env.sample_action(t))
         in_reward = nengo.Node(lambda t: env.sample_reward(t))
         in_phase = nengo.Node(lambda t: env.sample_phase(t))
@@ -220,7 +204,9 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         v = nengo.Ensemble(n_neurons, 4, radius=2)
         w = nengo.Ensemble(n_neurons, 2, radius=2)
         a = nengo.Ensemble(n_neurons, 2, radius=2)
-        vwa = VWA()
+        vlet = nengo.Ensemble(n_neurons, 4, radius=2)
+        vletout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())
+        vwa = nengo.Ensemble(n_neurons, 6, radius=3)
         ev = EV(env.learning_rates)
         ew = EW(env.learning_rates)
 
@@ -231,11 +217,14 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=pes)
         cg = nengo.Connection(g, w, synapse=0.01, transform=0, learning_rule_type=pes)
 
-        nengo.Connection(v, vwa[:4], synapse=0.01)
-        nengo.Connection(w, vwa[4:6], synapse=0.01)
-        nengo.Connection(in_letter, vwa[6])
-
-        nengo.Connection(vwa, a)
+        nengo.Connection(v[:2], vlet[:2], synapse=0.01)
+        nengo.Connection(in_letter2, vlet[2:4])
+        nengo.Connection(vlet, vwa[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])  # vletl: va if letter==1 else vb
+        nengo.Connection(vlet, vwa[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])  # vletr: vb if letter==1 else va
+        nengo.Connection(v[2:4], vwa[2:4], synapse=0.01)  # [vl, vr]
+        nengo.Connection(w, vwa[4:6], synapse=0.01)  # [wab, wlr]
+        nengo.Connection(vwa, a[0], synapse=0.01, function=lambda x: x[0]*x[4]+x[2]*x[5])  # vletl*wab + vl*wlr
+        nengo.Connection(vwa, a[1], synapse=0.01, function=lambda x: x[1]*x[4]+x[3]*x[5])  # vletr*wab + vr*wlr
 
         nengo.Connection(v, ev[:4], synapse=0.01)
         nengo.Connection(in_reward, ev[4])
@@ -260,6 +249,7 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         net.p_v = nengo.Probe(v)
         net.p_w = nengo.Probe(w)
         net.p_a = nengo.Probe(a)
+        net.p_vlet = nengo.Probe(vlet)
         net.p_vwa = nengo.Probe(vwa)
         net.p_ev = nengo.Probe(ev)
         net.p_ew = nengo.Probe(ew)
