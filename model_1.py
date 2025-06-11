@@ -7,12 +7,11 @@ import pandas as pd
 import sys
 
 class Environment():
-    def __init__(self, sid, seed=1, t_load=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1.0,
+    def __init__(self, sid, seed=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1.0,
                  alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=0.3, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
         self.rng = np.random.RandomState(seed=seed)
-        self.t_load = t_load
         self.t_cue = t_cue
         self.t_reward = t_reward
         self.dt = dt
@@ -32,7 +31,6 @@ class Environment():
         self.action = [0]
         self.feedback_phase = 0
         self.cue_phase = 0
-        self.load_phase = 1
     def set_cue(self, bid, trial):
         sid = self.sid
         left = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['left'].to_numpy()[0]
@@ -42,7 +40,6 @@ class Environment():
         self.action = [0]
         self.cue_phase = 1
         self.feedback_phase = 0
-        self.load_phase = 0
     def set_action(self, sim, net):
         self.action = [1] if sim.data[net.p_a][-1][0]>sim.data[net.p_a][-1][1] else [-1]
     def set_reward(self, bid, trial):
@@ -64,7 +61,6 @@ class Environment():
             raise
         self.cue_phase = 0
         self.feedback_phase = 1
-        self.load_phase = 0
     def sample_letter(self, t):
         return self.letter
     def sample_letter2(self, t):
@@ -72,21 +68,23 @@ class Environment():
     def sample_action(self, t):
         return self.action
     def sample_update(self, t):
-        update_L = 1 if self.action==[1] else 0
-        update_R = 1 if self.action==[-1] else 0
-        return [update_L, update_R]
+        update = [0,0,0,0]
+        update[0] = 1 if (self.action==[1] and self.letter==[1]) or (self.action==[-1] and self.letter==[-1]) else 0
+        update[1] = 1 if (self.action==[1] and self.letter==[-1]) or (self.action==[-1] and self.letter==[1]) else 0
+        update[2] = 1 if self.action==[1] else 0
+        update[3] = 1 if self.action==[-1] else 0
+        return update
     def sample_decay(self, t):
-        decay_L = 1 if self.action==[-1] else 0
-        decay_R = 1 if self.action==[1] else 0
-        return [decay_L, decay_R]
-    def sample_match(self, t):
-        match = 1 if (self.action==[1] and self.letter==[1]) or (self.action==[-1] and self.letter==[-1]) else 0
-        unmatch = 1 if (self.action==[1] and self.letter==[-1]) or (self.action==[-1] and self.letter==[1]) else 0
-        return [match, unmatch]
+        decay = [0,0,0,0]
+        decay[0] = 1 if (self.action==[1] and self.letter==[-1]) or (self.action==[-1] and self.letter==[1]) else 0
+        decay[1] = 1 if (self.action==[1] and self.letter==[1]) or (self.action==[-1] and self.letter==[-1]) else 0
+        decay[2] = 1 if self.action==[-1] else 0
+        decay[3] = 1 if self.action==[1] else 0
+        return decay
     def sample_reward(self, t):
         return self.reward
     def sample_phase(self, t):
-        return [self.cue_phase, self.feedback_phase, self.load_phase]
+        return [self.cue_phase, self.feedback_phase]
 
 class EVC(nengo.Node):
     def __init__(self, learning_rates):
@@ -99,11 +97,11 @@ class EVC(nengo.Node):
         vb = x[1]
         vl = x[2]
         vr = x[3]
-        reward = x[4]
-        update_L = x[5]
-        update_R = x[6]
-        match = x[7]
-        unmatch = x[8]
+        ua = x[4]
+        ub = x[5]
+        ul = x[6]
+        ur = x[7]
+        reward = x[8]
         phase = x[9]
         alpha_plus = self.learning_rates[0]
         alpha_minus = self.learning_rates[1]
@@ -111,10 +109,10 @@ class EVC(nengo.Node):
         alpha = alpha_plus if reward==1 else alpha_minus
         dv = [0,0,0,0]  # [va, vb, vl, vr]
         if phase==1:
-            dv[0] += -match * alpha*(reward-va)
-            dv[1] += -unmatch * alpha*(reward-vb)
-            dv[2] += -update_L * alpha*(reward-vl)
-            dv[3] += -update_R * alpha*(reward-vr)
+            dv[0] += -ua * alpha*(reward-va)
+            dv[1] += -ub * alpha*(reward-vb)
+            dv[2] += -ul * alpha*(reward-vl)
+            dv[3] += -ur * alpha*(reward-vr)
         return dv
 
 class EVU(nengo.Node):
@@ -128,76 +126,62 @@ class EVU(nengo.Node):
         vb = x[1]
         vl = x[2]
         vr = x[3]
-        decay_L = x[4]
-        decay_R = x[5]
-        match = x[6]
-        unmatch = x[7]
+        da = x[4]
+        db = x[5]
+        dl = x[6]
+        dr = x[7]
         phase = x[8]
         alpha_unchosen = self.learning_rates[2]
         dv = [0,0,0,0]  # [va, vb, vl, vr]
         if phase==1:
-            dv[0] += unmatch * (1-alpha_unchosen)*va
-            dv[1] += match * (1-alpha_unchosen)*vb
-            dv[2] += decay_L * (1-alpha_unchosen)*vl
-            dv[3] += decay_R * (1-alpha_unchosen)*vr
+            dv[0] += da * (1-alpha_unchosen)*va
+            dv[1] += db * (1-alpha_unchosen)*vb
+            dv[2] += dl * (1-alpha_unchosen)*vl
+            dv[3] += dr * (1-alpha_unchosen)*vr
         return dv
 
-class EW(nengo.Node):
-    def __init__(self, learning_rates):
-        self.learning_rates = learning_rates
-        self.size_in = 11
-        self.size_out = 2
+class DRel(nengo.Node):
+    def __init__(self):
+        self.size_in = 8
+        self.size_out = 1
         super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
     def step(self, t, x):
         va = x[0]
         vb = x[1]
         vl = x[2]
         vr = x[3]
-        wab = x[4]
-        wlr = x[5]
-        reward = x[6]
-        action = x[7]
-        letter = x[8]
-        phase = x[9]
-        load = x[10]
+        ca = x[4]
+        cb = x[5]
+        cl = x[6]
+        cr = x[7]
+        vclet = ca*va + cb*vb
+        vcloc = cl*vl + cr*vr
+        drel = vclet - vcloc
+        return drel
+
+class EW(nengo.Node):
+    def __init__(self, learning_rates):
+        self.learning_rates = learning_rates
+        self.size_in = 4
+        self.size_out = 2
+        super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
+    def step(self, t, x):
+        wab = x[0]
+        wlr = x[1]
+        drel = x[2]
+        phase = x[3]
         alpha_omega = self.learning_rates[3]
         gamma_omega = self.learning_rates[4]
         wab0 = self.learning_rates[5]
         wlr0 = self.learning_rates[6]
         dw = [0,0]  # [wab, wlr]
-        if action==1:
-            vca = vl
-            if letter==1:
-                vcs = va
-            elif letter==-1:
-                vcs = vb
-        elif action==-1:
-            vca = vr
-            if letter==1:
-                vcs = vb
-            elif letter==-1:
-                vcs = va
-        else:
-            vca = 0
-            vcs = 0
-        delta_rel = vcs - vca
-        if delta_rel>0:
-            tab = 1
-            tlr = 0
-        elif delta_rel<0:
-            tab = 0
-            tlr = 1
-        else:
-            tab = None
-            tlr = None
+        tab = 1 if drel>0 else 0
+        tlr = 1 if drel<0 else 0
         if phase==1:
-            dw[0] += -alpha_omega*np.abs(delta_rel)*(tab-wab)
-            dw[1] += -alpha_omega*np.abs(delta_rel)*(tlr-wlr)
+            dw[0] += -alpha_omega*(tab-wab)
+            dw[1] += -alpha_omega*(tlr-wlr)
             dw[0] += -gamma_omega*(wab0 - wab)
             dw[1] += -gamma_omega*(wlr0 - wlr)
-        if load==1:  # speed up initial loading
-            dw[0] += -3*(wab0 - wab)
-            dw[1] += -3*(wlr0 - wlr)
         return dw
 
 def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1e-4):
@@ -218,7 +202,6 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         in_reward = nengo.Node(lambda t: env.sample_reward(t))
         in_update = nengo.Node(lambda t: env.sample_update(t))
         in_decay = nengo.Node(lambda t: env.sample_decay(t))
-        in_match = nengo.Node(lambda t: env.sample_match(t))
         in_phase = nengo.Node(lambda t: env.sample_phase(t))
         
         # ensembles and nodes
@@ -230,15 +213,20 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         vlet = nengo.Ensemble(n_neurons, 4, radius=2)
         vwa = nengo.Ensemble(n_neurons, 6, radius=3)
         evc = EVC(env.learning_rates)
+        # evc = nengo.Ensemble(n_neurons, 8, radius=6)
+        # evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         evu = EVU(env.learning_rates)
         ew = EW(env.learning_rates)
+        drel = DRel()
+        # drel = nengo.Ensemble(n_neurons, 8, radius=6)
 
         # connections
         nengo.Connection(in_f, f)
         nengo.Connection(in_g, g)
 
         cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=pes)
-        cg = nengo.Connection(g, w, synapse=0.01, transform=0, learning_rule_type=pes)
+        # cg = nengo.Connection(g, w, synapse=0.01, transform=0, learning_rule_type=pes)
+        cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: [env.wab0, env.wlr0], learning_rule_type=pes)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
         nengo.Connection(in_letter2, vlet[2:4])
@@ -250,27 +238,23 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         nengo.Connection(vwa, a[1], synapse=0.01, function=lambda x: x[1]*x[4]+x[3]*x[5])  # vletr*wab + vr*wlr
 
         nengo.Connection(v, evc[:4], synapse=0.01)
-        nengo.Connection(in_reward, evc[4])
-        nengo.Connection(in_update[0], evc[5])
-        nengo.Connection(in_update[1], evc[6])
-        nengo.Connection(in_match[0], evc[7])
-        nengo.Connection(in_match[1], evc[8])
+        # nengo.Connection(in_reward, evc[:4], transform=[-1,-1,-1,-1])
+        nengo.Connection(in_update, evc[4:8])
+        nengo.Connection(in_reward, evc[8])
         nengo.Connection(in_phase[1], evc[9])  # feedback
 
         nengo.Connection(v, evu[:4], synapse=0.01)
-        nengo.Connection(in_decay[0], evu[4])
-        nengo.Connection(in_decay[1], evu[5])
-        nengo.Connection(in_match[0], evu[6])
-        nengo.Connection(in_match[1], evu[7])
+        nengo.Connection(in_decay, evu[4:8])
         nengo.Connection(in_phase[1], evu[8])  # feedback
 
-        nengo.Connection(v, ew[:4], synapse=0.01)
-        nengo.Connection(w, ew[4:6], synapse=0.01)
-        nengo.Connection(in_reward, ew[6])
-        nengo.Connection(in_action, ew[7])
-        nengo.Connection(in_letter, ew[8])
-        nengo.Connection(in_phase[1], ew[9])  # feedback
-        nengo.Connection(in_phase[2], ew[10])  # load
+        nengo.Connection(v, drel[:4], synapse=0.01)
+        nengo.Connection(in_update, drel[4:8])
+
+        nengo.Connection(w, ew[:2], synapse=0.01)
+        nengo.Connection(drel, ew[2])
+        # nengo.Connection(drel, ew[2], function=lambda x: x[0]*x[4]+x[1]*x[5])  # +vclet
+        # nengo.Connection(drel, ew[2], function=lambda x: -x[2]*x[6]-x[3]*x[7])  # -vcloc
+        nengo.Connection(in_phase[1], ew[3])  # feedback
 
         nengo.Connection(evc, cf.learning_rule)
         nengo.Connection(evu, cf.learning_rule)
@@ -287,6 +271,7 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
         net.p_ew = nengo.Probe(ew)
+        net.p_drel = nengo.Probe(drel)
 
 
     return net
@@ -298,7 +283,6 @@ def simulate_network(net, blocks=24):
     sid = env.sid
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     with sim:
-        sim.run(net.env.t_load)
         for bid in env.empirical.query("sid==@sid")['bid'].unique()[:blocks]:
             for trial in env.empirical.query("sid==@sid & bid==@bid")['trial'].unique():
                 print(f"running sid {env.sid}, block {bid}, trial {trial}")
