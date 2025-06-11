@@ -184,12 +184,12 @@ class EW(nengo.Node):
             dw[1] += -gamma_omega*(wlr0 - wlr)
         return dw
 
-def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1e-4):
+def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
     net.config[nengo.Probe].synapse = 0.1
-    inh_feedback = -1000*np.ones((n_neurons, 1))
+    winh = -1000*np.ones((n_neurons, 1))
     pes = nengo.PES(learning_rate=alpha_pes)
 
     with net:
@@ -212,10 +212,12 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         a = nengo.Ensemble(n_neurons, 2, radius=2)
         vlet = nengo.Ensemble(n_neurons, 4, radius=2)
         vwa = nengo.Ensemble(n_neurons, 6, radius=3)
-        evc = EVC(env.learning_rates)
-        # evc = nengo.Ensemble(n_neurons, 8, radius=6)
-        # evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
-        evu = EVU(env.learning_rates)
+        # evc = EVC(env.learning_rates)
+        evc = nengo.Ensemble(n_neurons, 8, radius=4)
+        evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
+        evu = nengo.Ensemble(n_neurons, 8, radius=4)
+        evuout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
+        # evu = EVU(env.learning_rates)
         ew = EW(env.learning_rates)
         drel = DRel()
         # drel = nengo.Ensemble(n_neurons, 8, radius=6)
@@ -225,7 +227,6 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         nengo.Connection(in_g, g)
 
         cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=pes)
-        # cg = nengo.Connection(g, w, synapse=0.01, transform=0, learning_rule_type=pes)
         cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: [env.wab0, env.wlr0], learning_rule_type=pes)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
@@ -238,26 +239,32 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         nengo.Connection(vwa, a[1], synapse=0.01, function=lambda x: x[1]*x[4]+x[3]*x[5])  # vletr*wab + vr*wlr
 
         nengo.Connection(v, evc[:4], synapse=0.01)
-        # nengo.Connection(in_reward, evc[:4], transform=[-1,-1,-1,-1])
+        nengo.Connection(in_reward, evc[:4], transform=[[-1],[-1],[-1],[-1]])
         nengo.Connection(in_update, evc[4:8])
-        nengo.Connection(in_reward, evc[8])
-        nengo.Connection(in_phase[1], evc[9])  # feedback
+        nengo.Connection(in_phase[0], evc.neurons, transform=winh)
 
-        nengo.Connection(v, evu[:4], synapse=0.01)
+        # nengo.Connection(v, evc[:4], synapse=0.01)
+        # nengo.Connection(in_update, evc[4:8])
+        # nengo.Connection(in_reward, evc[8])
+        # nengo.Connection(in_phase[1], evc[9])  # feedback
+
+        nengo.Connection(v, evu[:4], synapse=0.01, transform=-1)
         nengo.Connection(in_decay, evu[4:8])
-        nengo.Connection(in_phase[1], evu[8])  # feedback
+        nengo.Connection(in_phase[0], evu.neurons, transform=winh)
 
         nengo.Connection(v, drel[:4], synapse=0.01)
         nengo.Connection(in_update, drel[4:8])
 
         nengo.Connection(w, ew[:2], synapse=0.01)
         nengo.Connection(drel, ew[2])
-        # nengo.Connection(drel, ew[2], function=lambda x: x[0]*x[4]+x[1]*x[5])  # +vclet
-        # nengo.Connection(drel, ew[2], function=lambda x: -x[2]*x[6]-x[3]*x[7])  # -vcloc
         nengo.Connection(in_phase[1], ew[3])  # feedback
 
-        nengo.Connection(evc, cf.learning_rule)
-        nengo.Connection(evu, cf.learning_rule)
+        # nengo.Connection(evc, cf.learning_rule)
+        nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        # nengo.Connection(evu, cf.learning_rule)
+        nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(ew, cg.learning_rule)
     
         # probes
@@ -272,6 +279,8 @@ def build_network(env, n_neurons=2000, seed_network=1, inh=0, k=1.0, alpha_pes=1
         net.p_evu = nengo.Probe(evu)
         net.p_ew = nengo.Probe(ew)
         net.p_drel = nengo.Probe(drel)
+        net.p_evcout = nengo.Probe(evcout)
+        net.p_evuout = nengo.Probe(evuout)
 
 
     return net
