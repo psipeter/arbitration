@@ -86,25 +86,17 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-class EWT(nengo.Node):
-    def __init__(self, learning_rates):
-        self.learning_rates = learning_rates
-        self.size_in = 4
+class WTAR(nengo.Node):
+    def __init__(self):
+        self.size_in = 1
         self.size_out = 2
         super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
     def step(self, t, x):
-        wab = x[0]
-        wlr = x[1]
-        drel = x[2]
-        phase = x[3]
-        alpha_omega = self.learning_rates[3]
+        drel = x[0]
         dw = [0,0]  # [wab, wlr]
         tab = 1 if drel>0 else 0
         tlr = 1 if drel<0 else 0
-        if phase==1:
-            dw[0] += -alpha_omega*(tab-wab)
-            dw[1] += -alpha_omega*(tlr-wlr)
-        return dw
+        return [tab, tlr]
 
 def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
@@ -141,7 +133,8 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         evuout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         drel = nengo.Ensemble(n_neurons, 8, radius=4)
         drelout = nengo.Ensemble(1, 1, neuron_type=nengo.Direct())
-        ewt = EWT(env.learning_rates)
+        wtar = WTAR()
+        ewt = nengo.Ensemble(n_neurons, 2, radius=2)
         ewd = nengo.Ensemble(n_neurons, 2, radius=2)
 
         # connections
@@ -172,17 +165,19 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(v, drel[:4], synapse=0.01)
         nengo.Connection(in_update, drel[4:8])
 
-        nengo.Connection(w, ewt[:2], synapse=0.01)
-        nengo.Connection(drel, ewt[2], synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
-        nengo.Connection(in_phase[1], ewt[3])
+        nengo.Connection(drel, wtar, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
 
-        nengo.Connection(in_w0, ewd[:2])
-        nengo.Connection(w, ewd[:2], synapse=0.01, transform=-1)
+        nengo.Connection(wtar, ewt)
+        nengo.Connection(w, ewt, synapse=0.01, transform=-1)
+        nengo.Connection(in_phase[0], ewt.neurons, transform=winh)
+
+        nengo.Connection(in_w0, ewd)
+        nengo.Connection(w, ewd, synapse=0.01, transform=-1)
         nengo.Connection(in_phase[0], ewd.neurons, transform=winh)
 
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        nengo.Connection(ewt, cg.learning_rule)
+        nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-env.alpha_omega)
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-env.gamma_omega)
 
         nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
