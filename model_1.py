@@ -8,7 +8,7 @@ import sys
 
 class Environment():
     def __init__(self, sid, seed=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1.0,
-                 alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=0.3, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
+                 alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=1.0, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.sid = sid
         self.rng = np.random.RandomState(seed=seed)
@@ -86,79 +86,6 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-class EVC(nengo.Node):
-    def __init__(self, learning_rates):
-        self.learning_rates = learning_rates
-        self.size_in = 10
-        self.size_out = 4
-        super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
-    def step(self, t, x):
-        va = x[0]
-        vb = x[1]
-        vl = x[2]
-        vr = x[3]
-        ua = x[4]
-        ub = x[5]
-        ul = x[6]
-        ur = x[7]
-        reward = x[8]
-        phase = x[9]
-        alpha_plus = self.learning_rates[0]
-        alpha_minus = self.learning_rates[1]
-        alpha_unchosen = self.learning_rates[2]
-        alpha = alpha_plus if reward==1 else alpha_minus
-        dv = [0,0,0,0]  # [va, vb, vl, vr]
-        if phase==1:
-            dv[0] += -ua * alpha*(reward-va)
-            dv[1] += -ub * alpha*(reward-vb)
-            dv[2] += -ul * alpha*(reward-vl)
-            dv[3] += -ur * alpha*(reward-vr)
-        return dv
-
-class EVU(nengo.Node):
-    def __init__(self, learning_rates):
-        self.learning_rates = learning_rates
-        self.size_in = 9
-        self.size_out = 4
-        super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
-    def step(self, t, x):
-        va = x[0]
-        vb = x[1]
-        vl = x[2]
-        vr = x[3]
-        da = x[4]
-        db = x[5]
-        dl = x[6]
-        dr = x[7]
-        phase = x[8]
-        alpha_unchosen = self.learning_rates[2]
-        dv = [0,0,0,0]  # [va, vb, vl, vr]
-        if phase==1:
-            dv[0] += da * (1-alpha_unchosen)*va
-            dv[1] += db * (1-alpha_unchosen)*vb
-            dv[2] += dl * (1-alpha_unchosen)*vl
-            dv[3] += dr * (1-alpha_unchosen)*vr
-        return dv
-
-class DRel(nengo.Node):
-    def __init__(self):
-        self.size_in = 8
-        self.size_out = 1
-        super().__init__(self.step, size_in=self.size_in, size_out=self.size_out)
-    def step(self, t, x):
-        va = x[0]
-        vb = x[1]
-        vl = x[2]
-        vr = x[3]
-        ca = x[4]
-        cb = x[5]
-        cl = x[6]
-        cr = x[7]
-        vclet = ca*va + cb*vb
-        vcloc = cl*vl + cr*vr
-        drel = vclet - vcloc
-        return drel
-
 class EW(nengo.Node):
     def __init__(self, learning_rates):
         self.learning_rates = learning_rates
@@ -184,7 +111,7 @@ class EW(nengo.Node):
             dw[1] += -gamma_omega*(wlr0 - wlr)
         return dw
 
-def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3e-5):
+def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
@@ -212,15 +139,13 @@ def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3
         a = nengo.Ensemble(n_neurons, 2, radius=2)
         vlet = nengo.Ensemble(n_neurons, 4, radius=2)
         vwa = nengo.Ensemble(n_neurons, 6, radius=3)
-        # evc = EVC(env.learning_rates)
         evc = nengo.Ensemble(n_neurons, 8, radius=4)
         evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         evu = nengo.Ensemble(n_neurons, 8, radius=4)
         evuout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
-        # evu = EVU(env.learning_rates)
         ew = EW(env.learning_rates)
-        drel = DRel()
-        # drel = nengo.Ensemble(n_neurons, 8, radius=6)
+        drel = nengo.Ensemble(n_neurons, 8, radius=4)
+        drelout = nengo.Ensemble(1, 1, neuron_type=nengo.Direct())
 
         # connections
         nengo.Connection(in_f, f)
@@ -243,11 +168,6 @@ def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3
         nengo.Connection(in_update, evc[4:8])
         nengo.Connection(in_phase[0], evc.neurons, transform=winh)
 
-        # nengo.Connection(v, evc[:4], synapse=0.01)
-        # nengo.Connection(in_update, evc[4:8])
-        # nengo.Connection(in_reward, evc[8])
-        # nengo.Connection(in_phase[1], evc[9])  # feedback
-
         nengo.Connection(v, evu[:4], synapse=0.01, transform=-1)
         nengo.Connection(in_decay, evu[4:8])
         nengo.Connection(in_phase[0], evu.neurons, transform=winh)
@@ -256,13 +176,12 @@ def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3
         nengo.Connection(in_update, drel[4:8])
 
         nengo.Connection(w, ew[:2], synapse=0.01)
-        nengo.Connection(drel, ew[2])
+        nengo.Connection(drel, ew[2], synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
+        nengo.Connection(drel, drelout, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
         nengo.Connection(in_phase[1], ew[3])  # feedback
 
-        # nengo.Connection(evc, cf.learning_rule)
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        # nengo.Connection(evu, cf.learning_rule)
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(ew, cg.learning_rule)
@@ -281,6 +200,7 @@ def build_network(env, n_neurons=3000, seed_network=0, inh=0, k=1.0, alpha_pes=3
         net.p_drel = nengo.Probe(drel)
         net.p_evcout = nengo.Probe(evcout)
         net.p_evuout = nengo.Probe(evuout)
+        net.p_drelout = nengo.Probe(drelout)
 
 
     return net
