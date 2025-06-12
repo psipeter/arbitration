@@ -86,7 +86,7 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-class EW(nengo.Node):
+class EWT(nengo.Node):
     def __init__(self, learning_rates):
         self.learning_rates = learning_rates
         self.size_in = 4
@@ -98,17 +98,12 @@ class EW(nengo.Node):
         drel = x[2]
         phase = x[3]
         alpha_omega = self.learning_rates[3]
-        gamma_omega = self.learning_rates[4]
-        wab0 = self.learning_rates[5]
-        wlr0 = self.learning_rates[6]
         dw = [0,0]  # [wab, wlr]
         tab = 1 if drel>0 else 0
         tlr = 1 if drel<0 else 0
         if phase==1:
             dw[0] += -alpha_omega*(tab-wab)
             dw[1] += -alpha_omega*(tlr-wlr)
-            dw[0] += -gamma_omega*(wab0 - wab)
-            dw[1] += -gamma_omega*(wlr0 - wlr)
         return dw
 
 def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
@@ -130,6 +125,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         in_update = nengo.Node(lambda t: env.sample_update(t))
         in_decay = nengo.Node(lambda t: env.sample_decay(t))
         in_phase = nengo.Node(lambda t: env.sample_phase(t))
+        in_w0 = nengo.Node([env.wab0, env.wlr0])
         
         # ensembles and nodes
         f = nengo.Ensemble(n_neurons, 4)
@@ -143,9 +139,10 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         evu = nengo.Ensemble(n_neurons, 8, radius=4)
         evuout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
-        ew = EW(env.learning_rates)
         drel = nengo.Ensemble(n_neurons, 8, radius=4)
         drelout = nengo.Ensemble(1, 1, neuron_type=nengo.Direct())
+        ewt = EWT(env.learning_rates)
+        ewd = nengo.Ensemble(n_neurons, 2, radius=2)
 
         # connections
         nengo.Connection(in_f, f)
@@ -175,16 +172,22 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(v, drel[:4], synapse=0.01)
         nengo.Connection(in_update, drel[4:8])
 
-        nengo.Connection(w, ew[:2], synapse=0.01)
-        nengo.Connection(drel, ew[2], synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
-        nengo.Connection(drel, drelout, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
-        nengo.Connection(in_phase[1], ew[3])  # feedback
+        nengo.Connection(w, ewt[:2], synapse=0.01)
+        nengo.Connection(drel, ewt[2], synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
+        nengo.Connection(in_phase[1], ewt[3])
+
+        nengo.Connection(in_w0, ewd[:2])
+        nengo.Connection(w, ewd[:2], synapse=0.01, transform=-1)
+        nengo.Connection(in_phase[0], ewd.neurons, transform=winh)
 
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(ewt, cg.learning_rule)
+        nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-env.gamma_omega)
+
         nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        nengo.Connection(ew, cg.learning_rule)
+        nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(drel, drelout, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
     
         # probes
         net.p_letter = nengo.Probe(in_letter)
@@ -196,7 +199,8 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         net.p_vwa = nengo.Probe(vwa)
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
-        net.p_ew = nengo.Probe(ew)
+        net.p_ewt = nengo.Probe(ewt)
+        net.p_ewd = nengo.Probe(ewd)
         net.p_drel = nengo.Probe(drel)
         net.p_evcout = nengo.Probe(evcout)
         net.p_evuout = nengo.Probe(evuout)
