@@ -5,12 +5,14 @@ import nengo
 import scipy
 import pandas as pd
 import sys
+import gc
 
 class Environment():
-    def __init__(self, sid, seed=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=1.0,
+    def __init__(self, monkey, session, seed=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7,
                  alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=1.0, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
-        self.sid = sid
+        self.monkey = monkey
+        self.session = session
         self.rng = np.random.RandomState(seed=seed)
         self.t_cue = t_cue
         self.t_reward = t_reward
@@ -32,9 +34,10 @@ class Environment():
         self.feedback_phase = 0
         self.cue_phase = 0
     def set_cue(self, bid, trial):
-        sid = self.sid
-        left = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['left'].to_numpy()[0]
-        right = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['right'].to_numpy()[0]
+        monkey = self.monkey
+        session = self.session
+        left = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['left'].to_numpy()[0]
+        right = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['right'].to_numpy()[0]
         self.letter  = [1] if left=='A' else [-1]
         self.reward = [0]
         self.action = [0]
@@ -43,9 +46,10 @@ class Environment():
     def set_action(self, sim, net):
         self.action = [1] if sim.data[net.p_a][-1][0]>sim.data[net.p_a][-1][1] else [-1]
     def set_reward(self, bid, trial):
-        sid = self.sid
-        block = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['block'].to_numpy()[0]
-        correct = self.empirical.query("sid==@sid & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
+        monkey = self.monkey
+        session = self.session
+        block = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['block'].to_numpy()[0]
+        correct = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
         deliver_reward = self.rng.uniform(0,1)
         if (self.action == [1] and correct=='left') or (self.action == [-1] and correct=='right'):
             if deliver_reward<=self.p_reward:
@@ -86,7 +90,7 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
+def build_network(env, n_neurons=1000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
@@ -189,39 +193,92 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         net.p_evuout = nengo.Probe(evuout)
         net.p_drelout = nengo.Probe(drelout)
         net.p_wtarout = nengo.Probe(wtarout)
-
+        net.s_v = nengo.Probe(v.neurons, synapse=None)
+        net.s_w = nengo.Probe(w.neurons, synapse=None)
+        net.s_a = nengo.Probe(a.neurons, synapse=None)
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
+        net.s_evc = nengo.Probe(evc.neurons, synapse=None)
+        net.s_evu = nengo.Probe(evu.neurons, synapse=None)
+        net.s_drel = nengo.Probe(drel.neurons, synapse=None)
+        net.s_ewt = nengo.Probe(ewt.neurons, synapse=None)
+        net.s_ewd = nengo.Probe(ewd.neurons, synapse=None)
 
     return net
 
-def simulate_network(net, blocks=24):
+def simulate_network(net, blocks=2):
     dfs = []
-    columns = ['sid', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
+    columns = ['monkey', 'session', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
     env = net.env
-    sid = env.sid
+    monkey = env.monkey
+    session = env.session
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     with sim:
-        for bid in env.empirical.query("sid==@sid")['bid'].unique()[:blocks]:
-            for trial in env.empirical.query("sid==@sid & bid==@bid")['trial'].unique():
-                print(f"running sid {env.sid}, block {bid}, trial {trial}")
+        # for bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique()[:blocks]:
+        for bid in range(1, blocks+1):
+            for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
+                print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
                 env.set_cue(bid, trial)
                 sim.run(env.t_cue)
                 env.set_action(sim, net)
                 env.set_reward(bid, trial)
                 sim.run(env.t_reward)
-                block = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['block'].to_numpy()[0]
-                correct = env.empirical.query("sid==@sid & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
+                block = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['block'].to_numpy()[0]
+                correct = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
                 accuracy = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
-                reversal_at_trial = env.empirical.query("sid==@sid & bid==@bid")['reversal_at_trial'].unique()[0]
+                reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['reversal_at_trial'].unique()[0]
                 trial_before_reversal = trial if trial<reversal_at_trial else None
                 trial_after_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else None
-                dfs.append(pd.DataFrame([[sid, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
+                dfs.append(pd.DataFrame([[monkey, session, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
     data = pd.concat(dfs, ignore_index=True)
     return sim, data
 
+
+def simulate_spikes(net, blocks=24, filter_width=10):
+    env = net.env
+    monkey = env.monkey
+    session = env.session
+    seed_network = session + 10 if monkey=='V' else session
+    box_filter = np.ones(filter_width)
+    env = Environment(monkey=monkey, session=session)
+    net = build_network(env, seed_network=seed_network)
+    sim = nengo.Simulator(net, dt=net.env.dt, progress_bar=False)
+    probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
+    labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
+    arrays = [[], [], [], [], [], []]
+    with sim:
+        # for bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique()[:blocks]:
+        for bid in range(1, blocks+1):
+            for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
+                print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
+                t_start = sim.trange().shape[0]
+                net.env.set_cue(bid, trial)
+                sim.run(net.env.t_cue)
+                t_end = sim.trange().shape[0]
+                for p in range(len(probes)):
+                    spikes = sim.data[probes[p]][t_start:t_end] / 1000
+                    binned = scipy.ndimage.convolve1d(spikes, box_filter, mode='nearest')[::filter_width]
+                    arrays[p].append(binned)
+                env.set_action(sim, net)
+                env.set_reward(bid, trial)
+                sim.run(net.env.t_reward)
+    spike_dict = {}
+    for p in range(len(probes)):
+        label = labels[p]
+        data = np.stack(arrays[p], axis=2)
+        spike_dict[label] = data
+    return spike_dict
+
 if __name__ == "__main__":
-    sid = int(sys.argv[1])
-    env = Environment(sid=sid)
-    net = build_network(env, seed_network=sid)
-    sim, data = simulate_network(net)
-    data.to_pickle(f"data/model1_sid{sid}_behavior.pkl")
+    monkey = sys.argv[1]
+    session = int(sys.argv[2])
+    seed_network = session + 10 if monkey=='V' else session
+    env = Environment(monkey=monkey, session=session)
+    net = build_network(env, seed_network=seed_network)
+
+    # sim, data = simulate_network(net)
+    # data.to_pickle(f"data/model1_monkey{monkey}_session{session}_behavior.pkl")
+
+    data = simulate_spikes(net)
+    scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}.mat", data)
+
     print(data)
