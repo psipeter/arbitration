@@ -233,7 +233,8 @@ def simulate_network(net, blocks=24):
     return sim, data
 
 
-def simulate_spikes(net, blocks=24, filter_width=10):
+# def simulate_spikes(net, blocks=24, filter_width=10):
+def simulate_spikes(net, bid, filter_width=10):
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -247,20 +248,20 @@ def simulate_spikes(net, blocks=24, filter_width=10):
     arrays = [[], [], [], [], [], []]
     with sim:
         # for bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique()[:blocks]:
-        for bid in range(1, blocks+1):
-            for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
-                print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
-                t_start = sim.trange().shape[0]
-                net.env.set_cue(bid, trial)
-                sim.run(net.env.t_cue)
-                t_end = sim.trange().shape[0]
-                for p in range(len(probes)):
-                    spikes = sim.data[probes[p]][t_start:t_end] / 1000
-                    binned = scipy.ndimage.convolve1d(spikes, box_filter, mode='nearest')[::filter_width]
-                    arrays[p].append(binned)
-                env.set_action(sim, net)
-                env.set_reward(bid, trial)
-                sim.run(net.env.t_reward)
+        # for bid in range(1, blocks+1):
+        for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
+            print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
+            t_start = sim.trange().shape[0]
+            net.env.set_cue(bid, trial)
+            sim.run(net.env.t_cue)
+            t_end = sim.trange().shape[0]
+            for p in range(len(probes)):
+                spikes = sim.data[probes[p]][t_start:t_end] / 1000
+                binned = scipy.ndimage.convolve1d(spikes, box_filter, mode='nearest')[::filter_width]
+                arrays[p].append(binned)
+            env.set_action(sim, net)
+            env.set_reward(bid, trial)
+            sim.run(net.env.t_reward)
     spike_dict = {}
     for p in range(len(probes)):
         label = labels[p]
@@ -278,7 +279,11 @@ if __name__ == "__main__":
     # sim, data = simulate_network(net)
     # data.to_pickle(f"data/model1_monkey{monkey}_session{session}_behavior.pkl")
 
-    data = simulate_spikes(net)
-    scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}.mat", data)
+    blocks = 24
+    for bid in range(1, blocks+1):
+    # data = simulate_spikes(net)
+        data = simulate_spikes(net, bid)
+        # scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}.mat", data)
+        scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}_block{bid}.mat", data)
 
     print(data)
