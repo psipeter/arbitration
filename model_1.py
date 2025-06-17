@@ -205,7 +205,7 @@ def build_network(env, n_neurons=1000, seed_network=0, alpha_pes=3e-5):
 
     return net
 
-def simulate_network(net, blocks=2):
+def simulate_network(net, blocks=24):
     dfs = []
     columns = ['monkey', 'session', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
     env = net.env
