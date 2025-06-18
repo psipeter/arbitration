@@ -283,5 +283,7 @@ if __name__ == "__main__":
 
     blocks = 24
     for bid in range(1, blocks+1):
-        simulate_spikes(net, bid)
-    # scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}_block{bid}.mat", data)
+        if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
+            simulate_spikes(net, bid)
+        else:
+            print(f"monkey {monkey} session {session} missing block {bid}")
