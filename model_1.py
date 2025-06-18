@@ -262,12 +262,14 @@ def simulate_spikes(net, bid, filter_width=10):
             env.set_action(sim, net)
             env.set_reward(bid, trial)
             sim.run(net.env.t_reward)
-    spike_dict = {}
-    for p in range(len(probes)):
-        label = labels[p]
-        data = np.stack(arrays[p], axis=2)
-        spike_dict[label] = data
-    return spike_dict
+    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}.npz",
+        value=np.stack(arrays[0], axis=2),
+        omega=np.stack(arrays[1], axis=2),
+        action=np.stack(arrays[2], axis=2),
+        mixed=np.stack(arrays[3], axis=2),
+        error=np.stack(arrays[4], axis=2),
+        reliability=np.stack(arrays[5], axis=2),
+        )
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -281,9 +283,5 @@ if __name__ == "__main__":
 
     blocks = 24
     for bid in range(1, blocks+1):
-    # data = simulate_spikes(net)
-        data = simulate_spikes(net, bid)
-        # scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}.mat", data)
-        scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}_block{bid}.mat", data)
-
-    print(data)
+        simulate_spikes(net, bid)
+    # scipy.io.savemat(f"data/spikes/monkey{monkey}_session{session}_block{bid}.mat", data)
