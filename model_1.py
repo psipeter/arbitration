@@ -245,7 +245,7 @@ def simulate_values_spikes(net, bid, filter_width=10):
     spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     sv, sw, sa, sm, se, sr = [], [], [], [], [], []
-    va, vb, vl, vr, wab, wlr, al, ar = [], [], [], [] ,[] ,[], [], []
+    va, vb, vl, vr, wab, wlr, al, ar, acc = [], [], [], [] ,[] ,[], [], [], []
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
             print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
@@ -253,6 +253,7 @@ def simulate_values_spikes(net, bid, filter_width=10):
             net.env.set_cue(bid, trial)
             sim.run(net.env.t_cue)
             t_end = sim.trange().shape[0]
+            correct = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
             va.append(sim.data[net.p_v][-1,0])
             vb.append(sim.data[net.p_v][-1,1])
             vl.append(sim.data[net.p_v][-1,2])
@@ -269,6 +270,8 @@ def simulate_values_spikes(net, bid, filter_width=10):
             sr.append(scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
             env.set_action(sim, net)
             env.set_reward(bid, trial)
+            accuracy = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
+            acc.append(accuracy)
             sim.run(net.env.t_reward)
     np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_spikes.npz",
         v=np.stack(sv, axis=2),
@@ -287,6 +290,7 @@ def simulate_values_spikes(net, bid, filter_width=10):
         wlr=np.array(wlr),
         al=np.array(wab),
         ar=np.array(wab),
+        acc=np.array(acc),
         )
 
 
