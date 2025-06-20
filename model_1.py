@@ -90,7 +90,7 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-def build_network(env, n_neurons=1000, seed_network=0, alpha_pes=3e-5):
+def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
@@ -233,8 +233,7 @@ def simulate_network(net, blocks=24):
     return sim, data
 
 
-# def simulate_spikes(net, blocks=24, filter_width=10):
-def simulate_spikes(net, bid, filter_width=10):
+def simulate_values_spikes(net, bid, filter_width=10):
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -243,33 +242,53 @@ def simulate_spikes(net, bid, filter_width=10):
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
     sim = nengo.Simulator(net, dt=net.env.dt, progress_bar=False)
-    probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
+    spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
-    arrays = [[], [], [], [], [], []]
+    sv, sw, sa, sm, se, sr = [], [], [], [], [], []
+    va, vb, vl, vr, wab, wlr, al, ar = [], [], [], [] ,[] ,[], [], []
     with sim:
-        # for bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique()[:blocks]:
-        # for bid in range(1, blocks+1):
         for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
             print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
             t_start = sim.trange().shape[0]
             net.env.set_cue(bid, trial)
             sim.run(net.env.t_cue)
             t_end = sim.trange().shape[0]
-            for p in range(len(probes)):
-                spikes = sim.data[probes[p]][t_start:t_end] / 1000
-                binned = scipy.ndimage.convolve1d(spikes, box_filter, mode='nearest')[::filter_width]
-                arrays[p].append(binned)
+            va.append(sim.data[net.p_v][-1,0])
+            vb.append(sim.data[net.p_v][-1,1])
+            vl.append(sim.data[net.p_v][-1,2])
+            vr.append(sim.data[net.p_v][-1,3])
+            wab.append(sim.data[net.p_w][-1,0])
+            wlr.append(sim.data[net.p_w][-1,1])
+            al.append(sim.data[net.p_a][-1,0])
+            ar.append(sim.data[net.p_a][-1,1])
+            sv.append(scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            sw.append(scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            sa.append(scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            sm.append(scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            se.append(scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            sr.append(scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
             env.set_action(sim, net)
             env.set_reward(bid, trial)
             sim.run(net.env.t_reward)
-    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}.npz",
-        value=np.stack(arrays[0], axis=2),
-        omega=np.stack(arrays[1], axis=2),
-        action=np.stack(arrays[2], axis=2),
-        mixed=np.stack(arrays[3], axis=2),
-        error=np.stack(arrays[4], axis=2),
-        reliability=np.stack(arrays[5], axis=2),
+    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_spikes.npz",
+        v=np.stack(sv, axis=2),
+        w=np.stack(sw, axis=2),
+        a=np.stack(sa, axis=2),
+        m=np.stack(sm, axis=2),
+        e=np.stack(se, axis=2),
+        r=np.stack(sr, axis=2),
         )
+    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_values.npz",
+        va=np.array(va),
+        vb=np.array(vb),
+        vl=np.array(vl),
+        vr=np.array(vr),
+        wab=np.array(wab),
+        wlr=np.array(wlr),
+        al=np.array(wab),
+        ar=np.array(wab),
+        )
+
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -284,6 +303,6 @@ if __name__ == "__main__":
     blocks = 24
     for bid in range(1, blocks+1):
         if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
-            simulate_spikes(net, bid)
+            simulate_values_spikes(net, bid)
         else:
             print(f"monkey {monkey} session {session} missing block {bid}")
