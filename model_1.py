@@ -285,7 +285,7 @@ if __name__ == "__main__":
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
 
-    blocks = 1
+    blocks = 24
     for bid in range(1, blocks+1):
         if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
             simulate_values_spikes(net, bid)
