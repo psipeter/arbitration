@@ -205,43 +205,16 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
     return net
 
-def simulate_network(net, blocks=24):
-    dfs = []
-    columns = ['monkey', 'session', 'bid', 'trial_before_reversal', 'trial_after_reversal', 'accuracy']
-    env = net.env
-    monkey = env.monkey
-    session = env.session
-    sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
-    with sim:
-        # for bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique()[:blocks]:
-        for bid in range(1, blocks+1):
-            for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
-                print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
-                env.set_cue(bid, trial)
-                sim.run(env.t_cue)
-                env.set_action(sim, net)
-                env.set_reward(bid, trial)
-                sim.run(env.t_reward)
-                block = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['block'].to_numpy()[0]
-                correct = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
-                accuracy = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
-                reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['reversal_at_trial'].unique()[0]
-                trial_before_reversal = trial if trial<reversal_at_trial else None
-                trial_after_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else None
-                dfs.append(pd.DataFrame([[monkey, session, bid, trial_before_reversal, trial_after_reversal, accuracy]], columns=columns))
-    data = pd.concat(dfs, ignore_index=True)
-    return sim, data
-
 
 def simulate_values_spikes(net, bid, filter_width=10):
+    dfs = []
+    columns = ['monkey', 'session', 'bid', 'before', 'after',
+                'va', 'vb', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
     env = net.env
     monkey = env.monkey
     session = env.session
-    seed_network = session + 10 if monkey=='V' else session
     box_filter = np.ones(filter_width)
-    env = Environment(monkey=monkey, session=session)
-    net = build_network(env, seed_network=seed_network)
-    sim = nengo.Simulator(net, dt=net.env.dt, progress_bar=False)
+    sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     sv, sw, sa, sm, se, sr = [], [], [], [], [], []
@@ -272,9 +245,14 @@ def simulate_values_spikes(net, bid, filter_width=10):
             env.set_reward(bid, trial)
             acc.append(1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0)
             rew.append(1 if env.reward[0]==1 else 0)
-            clet.append(0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and correct=='right') else 0)
+            clet.append(0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1)
             cloc.append(0 if env.action==[1] else 1)
             sim.run(net.env.t_reward)
+            reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['reversal_at_trial'].unique()[0]
+            before = trial if trial<reversal_at_trial else None
+            after = trial - reversal_at_trial if trial>=reversal_at_trial else None
+            dfs.append(pd.DataFrame([[monkey, session, bid, before, after,
+                va[-1], vb[-1], vl[-1], vr[-1], wab[-1], wlr[-1], al[-1], ar[-1], acc[-1], clet[-1], cloc[-1]]], columns=columns))            
     np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_spikes.npz",
         v=np.stack(sv, axis=2),
         w=np.stack(sw, axis=2),
@@ -297,19 +275,17 @@ def simulate_values_spikes(net, bid, filter_width=10):
         clet=np.array(clet),
         cloc=np.array(cloc),
         )
-
+    data = pd.concat(dfs, ignore_index=True)
+    data.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{bid}_values.pkl")
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
-    seed_network = session + 4 if monkey=='V' else session
+    seed_network = session + 4 if monkey=='W' else session
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
 
-    # sim, data = simulate_network(net)
-    # data.to_pickle(f"data/model1_monkey{monkey}_session{session}_behavior.pkl")
-
-    blocks = 2
+    blocks = 1
     for bid in range(1, blocks+1):
         if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
             simulate_values_spikes(net, bid)
