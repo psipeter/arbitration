@@ -245,7 +245,7 @@ def simulate_values_spikes(net, bid, filter_width=10):
     spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     sv, sw, sa, sm, se, sr = [], [], [], [], [], []
-    va, vb, vl, vr, wab, wlr, al, ar, acc = [], [], [], [] ,[] ,[], [], [], []
+    va, vb, vl, vr, wab, wlr, al, ar, acc, rew, clet, cloc = [], [], [], [] ,[] ,[], [], [], [], [], [], []
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
             print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
@@ -270,8 +270,10 @@ def simulate_values_spikes(net, bid, filter_width=10):
             sr.append(scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
             env.set_action(sim, net)
             env.set_reward(bid, trial)
-            accuracy = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
-            acc.append(accuracy)
+            acc.append(1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0)
+            rew.append(1 if env.reward[0]==1 else 0)
+            clet.append(0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and correct=='right') else 0)
+            cloc.append(0 if env.action==[1] else 1)
             sim.run(net.env.t_reward)
     np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_spikes.npz",
         v=np.stack(sv, axis=2),
@@ -291,20 +293,23 @@ def simulate_values_spikes(net, bid, filter_width=10):
         al=np.array(wab),
         ar=np.array(wab),
         acc=np.array(acc),
+        rew=np.array(rew),
+        clet=np.array(clet),
+        cloc=np.array(cloc),
         )
 
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
-    seed_network = session + 10 if monkey=='V' else session
+    seed_network = session + 4 if monkey=='V' else session
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
 
     # sim, data = simulate_network(net)
     # data.to_pickle(f"data/model1_monkey{monkey}_session{session}_behavior.pkl")
 
-    blocks = 24
+    blocks = 2
     for bid in range(1, blocks+1):
         if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
             simulate_values_spikes(net, bid)
