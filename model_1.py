@@ -33,11 +33,11 @@ class Environment():
         self.action = [0]
         self.feedback_phase = 0
         self.cue_phase = 0
-    def set_cue(self, bid, trial):
+    def set_cue(self, block, trial):
         monkey = self.monkey
         session = self.session
-        left = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['left'].to_numpy()[0]
-        right = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['right'].to_numpy()[0]
+        left = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['left'].to_numpy()[0]
+        right = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['right'].to_numpy()[0]
         self.letter  = [1] if left=='A' else [-1]
         self.reward = [0]
         self.action = [0]
@@ -45,11 +45,11 @@ class Environment():
         self.feedback_phase = 0
     def set_action(self, sim, net):
         self.action = [1] if sim.data[net.p_a][-1][0]>sim.data[net.p_a][-1][1] else [-1]
-    def set_reward(self, bid, trial):
+    def set_reward(self, block, trial):
         monkey = self.monkey
         session = self.session
-        block = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['block'].to_numpy()[0]
-        correct = self.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
+        block = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['block'].to_numpy()[0]
+        correct = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
         deliver_reward = self.rng.uniform(0,1)
         if (self.action == [1] and correct=='left') or (self.action == [-1] and correct=='right'):
             if deliver_reward<=self.p_reward:
@@ -206,26 +206,26 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     return net
 
 
-def simulate_values_spikes(net, bid, filter_width=10):
+def simulate_values_spikes(net, block, filter_width=10):
     dfs = []
-    columns = ['monkey', 'session', 'bid', 'trial', 'block_type', 'before', 'after',
+    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after',
                 'va', 'vb', 'vletl', 'vletr', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
     env = net.env
     monkey = env.monkey
     session = env.session
-    block_type = 'what' if bid<= 12 else 'where'
+    block_type = 'what' if block<= 12 else 'where'
     box_filter = np.ones(filter_width)
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     with sim:
-        for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
-            print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
+        for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
+            print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
             t_start = sim.trange().shape[0]
-            net.env.set_cue(bid, trial)
+            net.env.set_cue(block, trial)
             sim.run(net.env.t_cue)
             t_end = sim.trange().shape[0]
-            correct = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
+            correct = env.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
             va = sim.data[net.p_v][-1,0]
             vb = sim.data[net.p_v][-1,1]
             vletl = sim.data[net.p_v][-1,0]
@@ -243,22 +243,22 @@ def simulate_values_spikes(net, bid, filter_width=10):
             se = scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
             sr = scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
             env.set_action(sim, net)
-            env.set_reward(bid, trial)
+            env.set_reward(block, trial)
             acc = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
             rew = 1 if env.reward[0]==1 else 0
             clet = 0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1
             cloc = 0 if env.action==[1] else 1
             sim.run(net.env.t_reward)
-            reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['reversal_at_trial'].unique()[0]
+            reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             before = trial if trial<reversal_at_trial else None
             after = trial - reversal_at_trial if trial>=reversal_at_trial else None
             df = pd.DataFrame([[
-                monkey, session, bid, trial, block_type, before, after,
+                monkey, session, block, trial, block_type, before, after,
                 va, vb, vletl, vletr, vl, vr, wab, wlr, al, ar, acc, clet, cloc]],
                 columns=columns)          
-            np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_trial{trial}_spikes.npz",
+            np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
                 v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
-            df.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{bid}_trial{trial}_values.pkl")
+            df.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_values.pkl")
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -267,9 +267,9 @@ if __name__ == "__main__":
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
 
-    blocks = 1
-    for bid in range(1, blocks+1):
-        if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
-            simulate_values_spikes(net, bid)
+    blocks = 24
+    for block in range(1, blocks+1):
+        if block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
+            simulate_values_spikes(net, block)
         else:
-            print(f"monkey {monkey} session {session} missing block {bid}")
+            print(f"monkey {monkey} session {session} missing block {block}")
