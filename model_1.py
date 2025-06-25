@@ -208,17 +208,16 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
 def simulate_values_spikes(net, bid, filter_width=10):
     dfs = []
-    columns = ['monkey', 'session', 'bid', 'before', 'after',
-                'va', 'vb', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
+    columns = ['monkey', 'session', 'bid', 'trial', 'block_type', 'before', 'after',
+                'va', 'vb', 'vletl', 'vletr', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
     env = net.env
     monkey = env.monkey
     session = env.session
+    block_type = 'what' if bid<= 12 else 'where'
     box_filter = np.ones(filter_width)
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
-    sv, sw, sa, sm, se, sr = [], [], [], [], [], []
-    va, vb, vl, vr, wab, wlr, al, ar, acc, rew, clet, cloc = [], [], [], [] ,[] ,[], [], [], [], [], [], []
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['trial'].unique():
             print(f"running monkey {env.monkey}, session {session}, block {bid}, trial {trial}")
@@ -227,56 +226,39 @@ def simulate_values_spikes(net, bid, filter_width=10):
             sim.run(net.env.t_cue)
             t_end = sim.trange().shape[0]
             correct = env.empirical.query("monkey==@monkey & session==@session & bid==@bid & trial==@trial")['correct'].to_numpy()[0]
-            va.append(sim.data[net.p_v][-1,0])
-            vb.append(sim.data[net.p_v][-1,1])
-            vl.append(sim.data[net.p_v][-1,2])
-            vr.append(sim.data[net.p_v][-1,3])
-            wab.append(sim.data[net.p_w][-1,0])
-            wlr.append(sim.data[net.p_w][-1,1])
-            al.append(sim.data[net.p_a][-1,0])
-            ar.append(sim.data[net.p_a][-1,1])
-            sv.append(scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
-            sw.append(scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
-            sa.append(scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
-            sm.append(scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
-            se.append(scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
-            sr.append(scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width])
+            va = sim.data[net.p_v][-1,0]
+            vb = sim.data[net.p_v][-1,1]
+            vletl = sim.data[net.p_v][-1,0]
+            vletr = sim.data[net.p_v][-1,1]
+            vl = sim.data[net.p_v][-1,2]
+            vr = sim.data[net.p_v][-1,3]
+            wab = sim.data[net.p_w][-1,0]
+            wlr = sim.data[net.p_w][-1,1]
+            al = sim.data[net.p_a][-1,0]
+            ar = sim.data[net.p_a][-1,1]
+            sv = scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            sw = scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            sa = scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            sm = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            se = scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            sr = scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
             env.set_action(sim, net)
             env.set_reward(bid, trial)
-            acc.append(1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0)
-            rew.append(1 if env.reward[0]==1 else 0)
-            clet.append(0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1)
-            cloc.append(0 if env.action==[1] else 1)
+            acc = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
+            rew = 1 if env.reward[0]==1 else 0
+            clet = 0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1
+            cloc = 0 if env.action==[1] else 1
             sim.run(net.env.t_reward)
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & bid==@bid")['reversal_at_trial'].unique()[0]
             before = trial if trial<reversal_at_trial else None
             after = trial - reversal_at_trial if trial>=reversal_at_trial else None
-            dfs.append(pd.DataFrame([[monkey, session, bid, before, after,
-                va[-1], vb[-1], vl[-1], vr[-1], wab[-1], wlr[-1], al[-1], ar[-1], acc[-1], clet[-1], cloc[-1]]], columns=columns))            
-    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_spikes.npz",
-        v=np.stack(sv, axis=2),
-        w=np.stack(sw, axis=2),
-        a=np.stack(sa, axis=2),
-        m=np.stack(sm, axis=2),
-        e=np.stack(se, axis=2),
-        r=np.stack(sr, axis=2),
-        )
-    np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_values.npz",
-        va=np.array(va),
-        vb=np.array(vb),
-        vl=np.array(vl),
-        vr=np.array(vr),
-        wab=np.array(wab),
-        wlr=np.array(wlr),
-        al=np.array(wab),
-        ar=np.array(wab),
-        acc=np.array(acc),
-        rew=np.array(rew),
-        clet=np.array(clet),
-        cloc=np.array(cloc),
-        )
-    data = pd.concat(dfs, ignore_index=True)
-    data.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{bid}_values.pkl")
+            df = pd.DataFrame([[
+                monkey, session, bid, trial, block_type, before, after,
+                va, vb, vletl, vletr, vl, vr, wab, wlr, al, ar, acc, clet, cloc]],
+                columns=columns)          
+            np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{bid}_trial{trial}_spikes.npz",
+                v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
+            df.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{bid}_trial{trial}_values.pkl")
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -285,7 +267,7 @@ if __name__ == "__main__":
     env = Environment(monkey=monkey, session=session)
     net = build_network(env, seed_network=seed_network)
 
-    blocks = 24
+    blocks = 1
     for bid in range(1, blocks+1):
         if bid in env.empirical.query("monkey==@monkey & session==@session")['bid'].unique():
             simulate_values_spikes(net, bid)
