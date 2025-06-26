@@ -66,8 +66,6 @@ class Environment():
         self.cue_phase = 0
         self.feedback_phase = 1
     def sample_letter(self, t):
-        return self.letter
-    def sample_letter2(self, t):
         return [1,0] if self.letter==[1] else [0,1]
     def sample_action(self, t):
         return self.action
@@ -103,7 +101,6 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         in_f = nengo.Node(env.F)
         in_g = nengo.Node(env.G)
         in_letter = nengo.Node(lambda t: env.sample_letter(t))
-        in_letter2 = nengo.Node(lambda t: env.sample_letter2(t))
         in_action = nengo.Node(lambda t: env.sample_action(t))
         in_reward = nengo.Node(lambda t: env.sample_reward(t))
         in_update = nengo.Node(lambda t: env.sample_update(t))
@@ -125,6 +122,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         wtar = nengo.Ensemble(n_neurons, 1)
         ewt = nengo.Ensemble(n_neurons, 2, radius=2)
         ewd = nengo.Ensemble(n_neurons, 2, radius=2)
+        vletout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())
         evcout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         evuout = nengo.Ensemble(1, 4, neuron_type=nengo.Direct())
         drelout = nengo.Ensemble(1, 1, neuron_type=nengo.Direct())
@@ -138,7 +136,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: [env.wab0, env.wlr0], learning_rule_type=pes)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
-        nengo.Connection(in_letter2, vlet[2:4])
+        nengo.Connection(in_letter, vlet[2:4])
         nengo.Connection(vlet, vwa[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])  # vletl: va if letter==1 else vb
         nengo.Connection(vlet, vwa[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])  # vletr: vb if letter==1 else va
         nengo.Connection(v[2:4], vwa[2:4], synapse=0.01)  # [vl, vr]
@@ -171,18 +169,19 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-env.alpha_omega)
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-env.gamma_omega)
 
+        nengo.Connection(vlet, vletout[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])
+        nengo.Connection(vlet, vletout[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])
         nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(drel, drelout, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
         nengo.Connection(wtar, wtarout, synapse=0.01, function=lambda x: [1,0] if x>0 else [0,1])
     
         # probes
-        net.p_letter = nengo.Probe(in_letter)
         net.p_reward = nengo.Probe(in_reward)
         net.p_v = nengo.Probe(v)
         net.p_w = nengo.Probe(w)
         net.p_a = nengo.Probe(a)
-        net.p_vlet = nengo.Probe(vlet)
+        net.p_vlet = nengo.Probe(vletout)
         net.p_vwa = nengo.Probe(vwa)
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
@@ -194,6 +193,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         net.p_drelout = nengo.Probe(drelout)
         net.p_wtarout = nengo.Probe(wtarout)
         net.s_v = nengo.Probe(v.neurons, synapse=None)
+        net.s_vlet = nengo.Probe(vlet.neurons, synapse=None)
         net.s_w = nengo.Probe(w.neurons, synapse=None)
         net.s_a = nengo.Probe(a.neurons, synapse=None)
         net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
@@ -228,10 +228,10 @@ def simulate_values_spikes(net, block, filter_width=10):
             correct = env.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
             va = sim.data[net.p_v][-1,0]
             vb = sim.data[net.p_v][-1,1]
-            vletl = sim.data[net.p_vlet][-1,0]
-            vletr = sim.data[net.p_vlet][-1,1]
             vl = sim.data[net.p_v][-1,2]
             vr = sim.data[net.p_v][-1,3]
+            vletl = sim.data[net.p_vlet][-1,0]
+            vletr = sim.data[net.p_vlet][-1,1]
             wab = sim.data[net.p_w][-1,0]
             wlr = sim.data[net.p_w][-1,1]
             al = sim.data[net.p_a][-1,0]
