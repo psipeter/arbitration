@@ -9,7 +9,7 @@ import gc
 
 class Environment():
     def __init__(self, monkey, session, seed=1, t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7,
-                 alpha_plus=0.5, alpha_minus=0.5, alpha_unchosen=1.0, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
+                 alpha_chosen=0.5, alpha_unchosen=1.0, omega_0=0.5, alpha_omega=0.3, gamma_omega=0.1):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.monkey = monkey
         self.session = session
@@ -18,8 +18,7 @@ class Environment():
         self.t_reward = t_reward
         self.dt = dt
         self.p_reward = p_reward
-        self.alpha_plus = alpha_plus
-        self.alpha_minus = alpha_minus
+        self.alpha_chosen = alpha_chosen
         self.alpha_unchosen = alpha_unchosen
         self.wab0 = omega_0
         self.wlr0 = 1-omega_0
@@ -28,7 +27,6 @@ class Environment():
         self.F = np.array([0,0,0,0])  # [A, B, L, R]
         self.G = np.array([0,0])  # [A/B, L/R]
         self.letter = [0]
-        self.learning_rates = [self.alpha_plus, self.alpha_minus, self.alpha_unchosen, self.alpha_omega, self.gamma_omega, self.wab0, self.wlr0]
         self.reward = [0]
         self.action = [0]
         self.feedback_phase = 0
@@ -164,7 +162,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(w, ewd, synapse=0.01, transform=-1)
         nengo.Connection(in_phase[0], ewd.neurons, transform=winh)
 
-        nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.alpha_chosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-env.alpha_omega)
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-env.gamma_omega)
@@ -172,7 +170,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(vlet, vletout[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])
         nengo.Connection(vlet, vletout[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])
         nengo.Connection(evu, evuout, synapse=0.01, transform=-env.alpha_unchosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_plus, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(evc, evcout, synapse=0.01, transform=env.alpha_chosen, function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
         nengo.Connection(drel, drelout, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])
         nengo.Connection(wtar, wtarout, synapse=0.01, function=lambda x: [1,0] if x>0 else [0,1])
     
@@ -206,7 +204,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     return net
 
 
-def simulate_values_spikes(net, block, filter_width=10):
+def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
     dfs = []
     columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after',
                 'va', 'vb', 'vletl', 'vletr', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
@@ -236,12 +234,13 @@ def simulate_values_spikes(net, block, filter_width=10):
             wlr = sim.data[net.p_w][-1,1]
             al = sim.data[net.p_a][-1,0]
             ar = sim.data[net.p_a][-1,1]
-            sv = scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-            sw = scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-            sa = scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-            sm = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-            se = scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-            sr = scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            if save_spikes:
+                sv = scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                sw = scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                sa = scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                sm = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                se = scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                sr = scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
             env.set_action(sim, net)
             env.set_reward(block, trial)
             acc = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
@@ -255,10 +254,34 @@ def simulate_values_spikes(net, block, filter_width=10):
             df = pd.DataFrame([[
                 monkey, session, block, trial, block_type, before, after,
                 va, vb, vletl, vletr, vl, vr, wab, wlr, al, ar, acc, clet, cloc]],
-                columns=columns)          
-            np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
-                v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
+                columns=columns)
             df.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_values.pkl")
+            if save_spikes:
+                np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
+                    v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
+
+def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_omega, gamma_omega, neurons):
+    dfs = []
+    columns = ['monkey', 'session', 'block', 'trial', 'choice']
+    seed_network = session + 4 if monkey=='W' else session
+    env = Environment(monkey=monkey, session=session, alpha_chosen=alpha_chosen,
+        alpha_unchosen=alpha_unchosen, omega_0=omega_0, alpha_omega=alpha_omega,
+        gamma_omega=gamma_omega)
+    net = build_network(env, n_neurons=neurons, seed_network=seed_network)
+    sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
+    with sim:
+        for block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
+            for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
+                print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
+                net.env.set_cue(block, trial)
+                sim.run(net.env.t_cue)
+                env.set_action(sim, net)
+                env.set_reward(block, trial)
+                choice = env.action[0]
+                sim.run(net.env.t_reward)
+                dfs.append(pd.DataFrame([[monkey, session, block, trial, choice]],columns=columns))
+    data = pd.concat(dfs, ignore_index=True)
+    return data
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -270,6 +293,6 @@ if __name__ == "__main__":
     blocks = 24
     for block in range(1, blocks+1):
         if block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
-            simulate_values_spikes(net, block)
+            simulate_values_spikes(net, block, save_spikes=True)
         else:
             print(f"monkey {monkey} session {session} missing block {block}")
