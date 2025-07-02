@@ -86,7 +86,7 @@ class Environment():
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
 
-def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
+def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5, run_to_fit=False):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
@@ -175,31 +175,34 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(wtar, wtarout, synapse=0.01, function=lambda x: [1,0] if x>0 else [0,1])
     
         # probes
-        net.p_reward = nengo.Probe(in_reward)
-        net.p_v = nengo.Probe(v)
-        net.p_w = nengo.Probe(w)
-        net.p_a = nengo.Probe(a)
-        net.p_vlet = nengo.Probe(vletout)
-        net.p_vwa = nengo.Probe(vwa)
-        net.p_evc = nengo.Probe(evc)
-        net.p_evu = nengo.Probe(evu)
-        net.p_ewt = nengo.Probe(ewt)
-        net.p_ewd = nengo.Probe(ewd)
-        net.p_drel = nengo.Probe(drel)
-        net.p_evcout = nengo.Probe(evcout)
-        net.p_evuout = nengo.Probe(evuout)
-        net.p_drelout = nengo.Probe(drelout)
-        net.p_wtarout = nengo.Probe(wtarout)
-        net.s_v = nengo.Probe(v.neurons, synapse=None)
-        net.s_vlet = nengo.Probe(vlet.neurons, synapse=None)
-        net.s_w = nengo.Probe(w.neurons, synapse=None)
-        net.s_a = nengo.Probe(a.neurons, synapse=None)
-        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
-        net.s_evc = nengo.Probe(evc.neurons, synapse=None)
-        net.s_evu = nengo.Probe(evu.neurons, synapse=None)
-        net.s_drel = nengo.Probe(drel.neurons, synapse=None)
-        net.s_ewt = nengo.Probe(ewt.neurons, synapse=None)
-        net.s_ewd = nengo.Probe(ewd.neurons, synapse=None)
+        if run_to_fit:
+            net.p_a = nengo.Probe(a)
+        else:
+            net.p_reward = nengo.Probe(in_reward)
+            net.p_v = nengo.Probe(v)
+            net.p_w = nengo.Probe(w)
+            net.p_a = nengo.Probe(a)
+            net.p_vlet = nengo.Probe(vletout)
+            net.p_vwa = nengo.Probe(vwa)
+            net.p_evc = nengo.Probe(evc)
+            net.p_evu = nengo.Probe(evu)
+            net.p_ewt = nengo.Probe(ewt)
+            net.p_ewd = nengo.Probe(ewd)
+            net.p_drel = nengo.Probe(drel)
+            net.p_evcout = nengo.Probe(evcout)
+            net.p_evuout = nengo.Probe(evuout)
+            net.p_drelout = nengo.Probe(drelout)
+            net.p_wtarout = nengo.Probe(wtarout)
+            net.s_v = nengo.Probe(v.neurons, synapse=None)
+            net.s_vlet = nengo.Probe(vlet.neurons, synapse=None)
+            net.s_w = nengo.Probe(w.neurons, synapse=None)
+            net.s_a = nengo.Probe(a.neurons, synapse=None)
+            net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
+            net.s_evc = nengo.Probe(evc.neurons, synapse=None)
+            net.s_evu = nengo.Probe(evu.neurons, synapse=None)
+            net.s_drel = nengo.Probe(drel.neurons, synapse=None)
+            net.s_ewt = nengo.Probe(ewt.neurons, synapse=None)
+            net.s_ewd = nengo.Probe(ewd.neurons, synapse=None)
 
     return net
 
@@ -267,7 +270,7 @@ def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_ome
     env = Environment(monkey=monkey, session=session, alpha_chosen=alpha_chosen,
         alpha_unchosen=alpha_unchosen, omega_0=omega_0, alpha_omega=alpha_omega,
         gamma_omega=gamma_omega)
-    net = build_network(env, n_neurons=neurons, seed_network=seed_network)
+    net = build_network(env, n_neurons=neurons, seed_network=seed_network, run_to_fit=True)
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     with sim:
         for block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
