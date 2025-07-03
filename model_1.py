@@ -258,9 +258,9 @@ def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
                 monkey, session, block, trial, block_type, before, after,
                 va, vb, vletl, vletr, vl, vr, wab, wlr, al, ar, acc, clet, cloc]],
                 columns=columns)
-            df.to_pickle(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_values.pkl")
+            df.to_pickle(f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_values.pkl")
             if save_spikes:
-                np.savez_compressed(f"data/spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
+                np.savez_compressed(f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
                     v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
 
 def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_omega, gamma_omega, neurons):
@@ -289,9 +289,26 @@ def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_ome
 if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
+    param_config = sys.argv[3]
     seed_network = session + 4 if monkey=='W' else session
-    env = Environment(monkey=monkey, session=session)
-    net = build_network(env, seed_network=seed_network)
+    if param_config=='load':
+        params = pd.read_pickle(f"data/{monkey}_{session}_params.pkl")
+        alpha_chosen = params['alpha_chosen'].unique()[0]
+        alpha_unchosen = params['alpha_unchosen'].unique()[0]
+        omega_0 = params['omega_0'].unique()[0]
+        alpha_omega = params['alpha_omega'].unique()[0]
+        gamma_omega = params['gamma_omega'].unique()[0]
+        neurons = params['neurons'].unique()[0]
+        env = Environment(monkey=monkey, session=session, alpha_chosen=alpha_chosen,
+            alpha_unchosen=alpha_unchosen, omega_0=omega_0, alpha_omega=alpha_omega,
+            gamma_omega=gamma_omega)
+        net = build_network(env, n_neurons=neurons, seed_network=seed_network)
+    elif param_config=='default':
+        env = Environment(monkey=monkey, session=session)
+        net = build_network(env, seed_network=seed_network)
+    else:
+        print("Must specify which parameters to use")
+        raise
 
     blocks = 24
     for block in range(1, blocks+1):
