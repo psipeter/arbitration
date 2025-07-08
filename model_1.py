@@ -194,30 +194,28 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5, run_to_fi
             net.p_drelout = nengo.Probe(drelout)
             net.p_wtarout = nengo.Probe(wtarout)
             net.s_v = nengo.Probe(v.neurons, synapse=None)
-            net.s_vlet = nengo.Probe(vlet.neurons, synapse=None)
+            # net.s_vlet = nengo.Probe(vlet.neurons, synapse=None)
             net.s_w = nengo.Probe(w.neurons, synapse=None)
             net.s_a = nengo.Probe(a.neurons, synapse=None)
             net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
             net.s_evc = nengo.Probe(evc.neurons, synapse=None)
-            net.s_evu = nengo.Probe(evu.neurons, synapse=None)
-            net.s_drel = nengo.Probe(drel.neurons, synapse=None)
+            # net.s_evu = nengo.Probe(evu.neurons, synapse=None)
+            # net.s_drel = nengo.Probe(drel.neurons, synapse=None)
             net.s_ewt = nengo.Probe(ewt.neurons, synapse=None)
-            net.s_ewd = nengo.Probe(ewd.neurons, synapse=None)
+            # net.s_ewd = nengo.Probe(ewd.neurons, synapse=None)
 
     return net
 
 
 def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
     dfs = []
-    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after',
-                'va', 'vb', 'vletl', 'vletr', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc', 'clet', 'cloc']
+    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after', 'va', 'vb', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc']
     env = net.env
     monkey = env.monkey
     session = env.session
     block_type = 'what' if block<= 12 else 'where'
     box_filter = np.ones(filter_width)
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
-    spike_probes = [net.s_v, net.s_w, net.s_a, net.s_vwa, net.s_evc, net.s_drel]
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
@@ -241,27 +239,27 @@ def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
                 sv = scipy.ndimage.convolve1d(sim.data[net.s_v][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
                 sw = scipy.ndimage.convolve1d(sim.data[net.s_w][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
                 sa = scipy.ndimage.convolve1d(sim.data[net.s_a][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-                sm = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-                se = scipy.ndimage.convolve1d(sim.data[net.s_evc][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
-                sr = scipy.ndimage.convolve1d(sim.data[net.s_drel][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+                svwa = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
             env.set_action(sim, net)
             env.set_reward(block, trial)
             acc = 1 if (env.action==[1] and correct=='left') or (env.action==[-1] and correct=='right') else 0
             rew = 1 if env.reward[0]==1 else 0
             clet = 0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1
             cloc = 0 if env.action==[1] else 1
+            t2_start = sim.trange().shape[0]
             sim.run(net.env.t_reward)
+            t2_end = sim.trange().shape[0]
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             before = trial if trial<reversal_at_trial else None
             after = trial - reversal_at_trial if trial>=reversal_at_trial else None
-            df = pd.DataFrame([[
-                monkey, session, block, trial, block_type, before, after,
-                va, vb, vletl, vletr, vl, vr, wab, wlr, al, ar, acc, clet, cloc]],
-                columns=columns)
-            df.to_pickle(f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_values.pkl")
             if save_spikes:
-                np.savez_compressed(f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}_spikes.npz",
-                    v=sv, w=sw, a=sa, m=sm, e=se, r=sr)
+                sevc = scipy.ndimage.convolve1d(sim.data[net.s_evc][t2_start:t2_end]/1000, box_filter, mode='nearest')[::filter_width]
+                sewt = scipy.ndimage.convolve1d(sim.data[net.s_ewt][t2_start:t2_end]/1000, box_filter, mode='nearest')[::filter_width]
+            df = pd.DataFrame([[monkey, session, block, trial, block_type, before, after, va, vb, vl, vr, wab, wlr, al, ar, acc]], columns=columns)
+            filename = f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}"
+            df.to_pickle(filename+"_values.pkl")
+            if save_spikes:
+                np.savez_compressed(filename+"_spikes.npz", v=sv, w=sw, a=sa, vwa=svwa, evc=sevc, ewt=sewt)
 
 def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_omega, gamma_omega, neurons):
     dfs = []
@@ -310,7 +308,7 @@ if __name__ == "__main__":
         print("Must specify which parameters to use")
         raise
 
-    blocks = 24
+    blocks = 2
     for block in range(1, blocks+1):
         if block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
             simulate_values_spikes(net, block, save_spikes=True)
