@@ -209,7 +209,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5, run_to_fi
 
 def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
     dfs = []
-    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after', 'va', 'vb', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'acc']
+    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'before', 'after', 'va', 'vb', 'vl', 'vr', 'wab', 'wlr', 'al', 'ar', 'evc', 'ewt', 'acc']
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -252,10 +252,12 @@ def simulate_values_spikes(net, block, filter_width=10, save_spikes=False):
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             before = trial if trial<reversal_at_trial else None
             after = trial - reversal_at_trial if trial>=reversal_at_trial else None
+            evc = sim.data[net.p_evc][-1,1]
+            ewt = sim.data[net.p_ewt][-1,1]
             if save_spikes:
                 sevc = scipy.ndimage.convolve1d(sim.data[net.s_evc][t2_start:t2_end]/1000, box_filter, mode='nearest')[::filter_width]
                 sewt = scipy.ndimage.convolve1d(sim.data[net.s_ewt][t2_start:t2_end]/1000, box_filter, mode='nearest')[::filter_width]
-            df = pd.DataFrame([[monkey, session, block, trial, block_type, before, after, va, vb, vl, vr, wab, wlr, al, ar, acc]], columns=columns)
+            df = pd.DataFrame([[monkey, session, block, trial, block_type, before, after, va, vb, vl, vr, wab, wlr, al, ar, evc, ewt, acc]], columns=columns)
             filename = f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}"
             df.to_pickle(filename+"_values.pkl")
             if save_spikes:
@@ -308,7 +310,7 @@ if __name__ == "__main__":
         print("Must specify which parameters to use")
         raise
 
-    blocks = 2
+    blocks = 24
     for block in range(1, blocks+1):
         if block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
             simulate_values_spikes(net, block, save_spikes=True)
