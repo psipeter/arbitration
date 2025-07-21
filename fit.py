@@ -21,17 +21,17 @@ def choice_loss(monkey, session, nef_data):
 	return loss
 
 def model1_loss(trial, monkey, session):
-    alpha_chosen = trial.suggest_float("alpha_chosen", 0.5, 0.51, step=0.01)
-    alpha_unchosen = trial.suggest_float("alpha_unchosen", 1.0, 1.01, step=0.01)
-    omega_0 = trial.suggest_float("omega_0", 0.5, 0.51, step=0.01)
-    alpha_omega = trial.suggest_float("alpha_omega", 0.3, 0.31, step=0.01)
-    gamma_omega = trial.suggest_float("gamma_omega", 0.1, 0.11, step=0.01)
-    neurons = trial.suggest_int("neurons", 3000, 3100, step=100)
+    alpha_chosen = trial.suggest_float("alpha_chosen", 0.01, 1.0, step=0.01)
+    alpha_unchosen = trial.suggest_float("alpha_unchosen", 0.01, 1.0, step=0.01)
+    omega_0 = trial.suggest_float("omega_0", 0.01, 1.0, step=0.01)
+    alpha_omega = trial.suggest_float("alpha_omega", 0.01, 1.0, step=0.01)
+    gamma_omega = trial.suggest_float("gamma_omega", 0.01, 1.0, step=0.01)
+    neurons = trial.suggest_int("neurons", 3000, 3000, step=1)
     data = run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_omega, gamma_omega, neurons)
     loss = choice_loss(monkey, session, data)
     return loss
 
-def fit_model1(monkey, session, optuna_trials=1):
+def fit_model1(monkey, session, optuna_trials=100):
     study = optuna.create_study(direction="minimize")
     study.optimize(lambda trial: model1_loss(trial, monkey, session), n_trials=optuna_trials)
     best_params = study.best_trial.params
