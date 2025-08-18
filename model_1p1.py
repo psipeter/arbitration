@@ -204,14 +204,11 @@ def simulate_values_spikes(net, block):
     monkey = env.monkey
     session = env.session
     block_type = 'what' if block<= 12 else 'where'
-    filter_width = 10
-    box_filter = np.ones(filter_width)
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
             print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
-            t_start = sim.trange().shape[0]
             net.env.set_cue(block, trial)
             sim.run(net.env.t_cue)
             t_end = sim.trange().shape[0]
@@ -225,7 +222,7 @@ def simulate_values_spikes(net, block):
             w = sim.data[net.p_w][-1,0]
             al = sim.data[net.p_a][-1,0]
             ar = sim.data[net.p_a][-1,1]
-            svwa = scipy.ndimage.convolve1d(sim.data[net.s_vwa][t_start:t_end]/1000, box_filter, mode='nearest')[::filter_width]
+            svwa = sim.data[net.s_vwa][t_end-100:t_end].sum(axis=0) / 1000  # sum neuron spikes over time in the 100ms preceeding choice
             env.set_action(sim, net)
             env.set_reward(block, trial)
             clet = 0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1
