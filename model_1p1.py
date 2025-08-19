@@ -193,6 +193,8 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5, run_to_fi
             # net.p_drelout = nengo.Probe(drelout)
             # net.p_wtarout = nengo.Probe(wtarout)
             net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
+            net.s_evc = nengo.Probe(evc.neurons, synapse=None)
+            net.s_a = nengo.Probe(a.neurons, synapse=None)
 
     return net
 
@@ -211,18 +213,19 @@ def simulate_values_spikes(net, block):
             print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
             net.env.set_cue(block, trial)
             sim.run(net.env.t_cue)
-            t_end = sim.trange().shape[0]
+            t_choice = sim.trange().shape[0]
+            t0 = t_choice - 100  # 100ms prior to choice
             correct = env.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
-            va = sim.data[net.p_v][-1,0] if env.letter==[1] else sim.data[net.p_v][-1,1]
-            vb = sim.data[net.p_v][-1,1] if env.letter==[1] else sim.data[net.p_v][-1,0]
-            vl = sim.data[net.p_v][-1,2]
-            vr = sim.data[net.p_v][-1,3]
-            vletl = sim.data[net.p_vlet][-1,0]
-            vletr = sim.data[net.p_vlet][-1,1]
-            w = sim.data[net.p_w][-1,0]
-            al = sim.data[net.p_a][-1,0]
-            ar = sim.data[net.p_a][-1,1]
-            svwa = sim.data[net.s_vwa][t_end-100:t_end].sum(axis=0) / 1000  # sum neuron spikes over time in the 100ms preceeding choice
+            va = sim.data[net.p_v][t0:t_choice,0].mean() if env.letter==[1] else sim.data[net.p_v][t0:t_choice,1].mean()
+            vb = sim.data[net.p_v][t0:t_choice,1].mean() if env.letter==[1] else sim.data[net.p_v][t0:t_choice,0].mean()
+            vl = sim.data[net.p_v][t0:t_choice,2].mean()
+            vr = sim.data[net.p_v][t0:t_choice,3].mean()
+            vletl = sim.data[net.p_vlet][t0:t_choice,0].mean()
+            vletr = sim.data[net.p_vlet][t0:t_choice,1].mean()
+            w = sim.data[net.p_w][t0:t_choice,0].mean()
+            al = sim.data[net.p_a][t0:t_choice,0].mean()
+            ar = sim.data[net.p_a][t0:t_choice,1].mean()
+            svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
             env.set_action(sim, net)
             env.set_reward(block, trial)
             clet = 0 if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 1
@@ -230,13 +233,17 @@ def simulate_values_spikes(net, block):
             acc = 1 if (cloc==0 and correct=='left') or (cloc==1 and correct=='right') else 0
             rew = 1 if env.reward[0]==1 else 0
             sim.run(net.env.t_reward)
+            t1 = t_choice + 100  # 100ms following choice / reward delivery
+            sevc = sim.data[net.s_evc][t_choice:t1].sum(axis=0) / 1000
+            sa = sim.data[net.s_a][t_choice:t1].sum(axis=0) / 1000
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             before = trial if trial<reversal_at_trial else None
             after = trial - reversal_at_trial if trial>=reversal_at_trial else None
-            df = pd.DataFrame([[monkey, session, block, trial, block_type, before, after, va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
+            df = pd.DataFrame([[monkey, session, block, trial, block_type, before, after,
+                va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
             filename = f"data/nef_spikes/monkey{monkey}_session{session}_block{block}_trial{trial}"
             df.to_pickle(filename+"_values.pkl")
-            np.savez_compressed(filename+"_spikes.npz", vwa=svwa)
+            np.savez_compressed(filename+"_spikes.npz", vwa=svwa, evc=sevc, a=sa)
 
 def run_to_fit(monkey, session, alpha_chosen, alpha_unchosen, omega_0, alpha_omega, gamma_omega, neurons):
     dfs = []
@@ -296,7 +303,7 @@ if __name__ == "__main__":
         print("Must specify which parameters to use")
         raise
 
-    blocks = 24
+    blocks = 2
     for block in range(1, blocks+1):
         if block in env.empirical.query("monkey==@monkey & session==@session")['block'].unique():
             simulate_values_spikes(net, block)
