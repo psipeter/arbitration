@@ -4,27 +4,50 @@ import pandas as pd
 import sys
 
 class RL_env():
-	def __init__(self, monkey, session, block, p_reward=0.7):
+	def __init__(self, monkey, session, block, p_reward=0.7, fitting=False, reward_seed=None):
 		self.monkey = monkey
-		self.session = session
 		self.block = block
 		self.p_reward = p_reward
+		self.fitting = fitting
 		self.empirical = pd.read_pickle("data/empirical.pkl")
-		self.rng = np.random.RandomState(seed=block + session + 4 if monkey=='W' else block + session)
+		self.reward_seed = reward_seed if reward_seed is not None else (block+100*session+100000 if monkey=='W' else block+100*session)
+		self.rng = np.random.RandomState(seed=reward_seed)
 		self.correct = None
 		self.reward = None
 		self.accuracy = None
+		if self.fitting:
+			self.block_type = 'what' if block<= 12 else 'where'
+			self.correct_let = 'A' if self.rng.uniform(0,1)<0.5 else 'B'
+			self.correct_loc = 'left' if self.rng.uniform(0,1)<0.5 else 'right'
+			self.reversal_at_trial = self.rng.randint(30, 51)
+			self.session = reward_seed
+		else:
+			self.session = session
+			try:
+				self.reversal_at_trial = self.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
+			except:
+				pass
 	def set_cue(self, trial):
 		monkey = self.monkey
 		session = self.session
 		block = self.block
-		self.left = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['left'].to_numpy()[0]
-		self.right = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['right'].to_numpy()[0]
+		if self.fitting:
+			if trial==self.reversal_at_trial:
+				self.correct_let = 'B' if self.correct_let=='A' else 'A'
+				self.correct_loc = 'right' if self.correct_loc=='left' else 'left'
+			self.left= 'A' if self.rng.uniform(0,1)<0.5 else 'B'
+			self.right = 'B' if self.left=='A' else 'A'
+		else:
+			self.left = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['left'].to_numpy()[0]
+			self.right = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['right'].to_numpy()[0]
 	def set_reward(self, trial, action):
 		monkey = self.monkey
 		session = self.session
 		block = self.block
-		correct = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
+		if self.fitting:
+			correct = 'left' if ((self.block_type=='where' and self.correct_loc=='left') or (self.block_type=='what' and self.correct_let==self.left)) else 'right'
+		else:
+			correct = self.empirical.query("monkey==@monkey & session==@session & block==@block & trial==@trial")['correct'].to_numpy()[0]
 		deliver_reward = self.rng.uniform(0,1)
 		if (action=='left' and correct=='left') or (action=='right' and correct=='right'):
 			accuracy = 1
@@ -97,14 +120,14 @@ class RL_model():
 
 def output_data(trial, env, model):
 	block_type = 'what' if env.block<12 else 'where'
-	reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
-	trial_pre_reversal = trial if trial<reversal_at_trial else -1
-	trial_post_reversal = trial - reversal_at_trial if trial>=reversal_at_trial else -1
+	trial_pre_reversal = trial if trial<env.reversal_at_trial else -1
+	trial_post_reversal = trial - env.reversal_at_trial if trial>=env.reversal_at_trial else -1
 	columns = [
 		'monkey',
 		'session',
 		'block',
 		'trial',
+		'reward_seed',
 		'block_type',
 		'trial_pre_reversal',
 		'trial_post_reversal',
@@ -125,6 +148,7 @@ def output_data(trial, env, model):
 		env.session,
 		env.block,
 		trial,
+		env.reward_seed,
 		block_type,
 		trial_pre_reversal,
 		trial_post_reversal,
@@ -143,10 +167,15 @@ def output_data(trial, env, model):
 		]],columns=columns)
 	return df
 
-def run_rl_model(monkey, session, block, params):
-	env = RL_env(monkey, session, block)
+def run_rl_model(monkey, session, block, params, session_config):
+	if session_config=='empirical':
+		env = RL_env(monkey, session, block)
+		trials = env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique()
+	else:
+		env = RL_env(monkey, session, block, reward_seed=session, fitting=True)
+		trials = np.arange(1,81)
 	model = RL_model(params, env)
-	for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
+	for trial in trials:
 		env.set_cue(trial)
 		model.act()
 		env.set_reward(trial, model.cloc)
@@ -159,12 +188,13 @@ if __name__ == "__main__":
 	# session = int(sys.argv[2])
 	# param_config = sys.argv[3]
 	param_config = sys.argv[1]
+	session_config = sys.argv[2]
+	sessions = [0,1,2,3] if session_config=='empirical' else range(100)
 	for monkey in ['V', 'W']:
-		for session in [0,1,2,3]:
+		for session in sessions:
 			if param_config=='load':
-				pass
-				# TODO
-			if param_config=='random':
+				params = pd.read_pickle(f"data/rl/{monkey}_params.pkl").iloc[0].to_dict()
+			elif param_config=='random':
 				rng = np.random.RandomState(seed = session + 4 if monkey=='W' else session)
 				params = {
 					'alpha_plus':rng.uniform(0.4, 0.6),
@@ -180,4 +210,4 @@ if __name__ == "__main__":
 
 			blocks = 24
 			for block in range(1, blocks+1):
-				run_rl_model(monkey, session, block, params)
+				run_rl_model(monkey, session, block, params, session_config)
