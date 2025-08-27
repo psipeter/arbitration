@@ -230,7 +230,8 @@ def simulate_values_spikes(net):
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     with sim:
-        for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
+        # for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
+        for trial in range(1,81):
             print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
             net.env.set_cue(block, trial)
             sim.run(net.env.t_cue)
@@ -251,7 +252,7 @@ def simulate_values_spikes(net):
             clet = 'A' if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 'B'
             cloc = 'left' if env.action==[1] else 'right'
             acc = 1 if (cloc=='left' and env.correct_loc=='left') or (cloc=='right' and env.correct_loc=='right') else 0
-            rew = 1 if env.reward[0]==1 else 0
+            rew = 1 if env.reward[0]==1 else -1
             sim.run(net.env.t_reward)
             t1 = t_choice + 100  # 100ms following choice / reward delivery
             sevc = sim.data[net.s_evc][t_choice:t1].sum(axis=0) / 1000
