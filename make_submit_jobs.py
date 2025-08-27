@@ -8,7 +8,7 @@ sessions = range(3)
 
 for monkey in ['V', 'W']:
 	for session in sessions:
-		fit_string = f"python model1p2.py {monkey} {session} load fitting"
+		fit_string = f"python model_1p2.py {monkey} {session} load fitting"
 		file_string = f'job_{monkey}{session}.sh'
 		with open (file_string, 'w') as rsh:
 			rsh.write('''#!/bin/bash''')
