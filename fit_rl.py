@@ -83,7 +83,7 @@ def rl_loss(trial, monkey):
 	# 	'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.05, step=0.01),
 	# }
 	params = {
-		'fitting_trials': 20,
+		'fitting_trials': 30,
 		'alpha_plus':trial.suggest_float('alpha_plus', 0.1, 0.9, step=0.01),
 		'alpha_minus':trial.suggest_float('alpha_minus', 0.1, 0.9, step=0.01),
 		'gamma_u':trial.suggest_float('gamma_u', 0.1, 0.9, step=0.01),
@@ -96,7 +96,7 @@ def rl_loss(trial, monkey):
 	# print(data, loss)
 	return loss
 
-def fit_rl(monkey, optuna_trials=20):
+def fit_rl(monkey, optuna_trials=300):
     study = optuna.create_study(direction="minimize")
     study.optimize(lambda trial: rl_loss(trial, monkey), n_trials=optuna_trials)
     best_params = study.best_trial.params
