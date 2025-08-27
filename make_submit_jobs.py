@@ -24,6 +24,6 @@ for monkey in ['V', 'W']:
 			rsh.write(fit_string)
 
 	for session in sessions:
-		submit_string = ["sbatch", f"job_s{session}.sh"]
+		submit_string = ["sbatch", f"job_{monkey}{session}.sh"]
 		a = subprocess.run(submit_string)
 		time.sleep(1)  # wait a few seconds before next submission to help out SLURM system
