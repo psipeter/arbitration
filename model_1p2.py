@@ -276,3 +276,6 @@ if __name__ == "__main__":
         env = Environment(monkey=monkey, session=session, block=block, params=params, fitting=session_config)
         net = build_network(env, seed_network=seed_network)
         simulate_values_spikes(net)
+        del(env)
+        del(net)
+        gc.collect()

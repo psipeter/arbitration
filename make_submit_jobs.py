@@ -13,7 +13,7 @@ for monkey in ['V', 'W']:
 		with open (file_string, 'w') as rsh:
 			rsh.write('''#!/bin/bash''')
 			rsh.write("\n")
-			rsh.write('''#SBATCH --mem=8G''')
+			rsh.write('''#SBATCH --mem=32G''')
 			rsh.write("\n")
 			rsh.write('''#SBATCH --nodes=1''')
 			rsh.write("\n")
