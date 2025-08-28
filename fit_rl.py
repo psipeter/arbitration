@@ -14,7 +14,7 @@ def curve_rmse_loss(monkey, rl_data):
 	emp.rename(columns={'monkey_choice': 'cloc'}, inplace=True)
 	emp.rename(columns={'monkey_accuracy': 'acc'}, inplace=True)
 	emp.rename(columns={'reward': 'rew'}, inplace=True)
-	emp['rew'] = emp['rew'].replace(0, -1)
+	# emp['rew'] = emp['rew'].replace(0, -1)
 	emp['reward_seed'] = 'empirical'
 	emp = emp.drop(columns=['left', 'right', 'correct', 'reversal_at_trial'])
 
@@ -86,7 +86,7 @@ def rl_loss(trial, monkey):
 		'fitting_trials': 30,
 		'alpha_plus':trial.suggest_float('alpha_plus', 0.1, 0.9, step=0.01),
 		'alpha_minus':trial.suggest_float('alpha_minus', 0.1, 0.9, step=0.01),
-		'gamma_u':trial.suggest_float('gamma_u', 0.1, 0.9, step=0.01),
+		# 'gamma_u':trial.suggest_float('gamma_u', 0.1, 0.9, step=0.01),
 		'w0':trial.suggest_float('w0', 0.1, 0.9, step=0.01),
 		'alpha_w':trial.suggest_float('alpha_w', 0.1, 0.9, step=0.01),
 		'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.2, step=0.01),
@@ -96,7 +96,7 @@ def rl_loss(trial, monkey):
 	# print(data, loss)
 	return loss
 
-def fit_rl(monkey, optuna_trials=300):
+def fit_rl(monkey, optuna_trials=100):
     study = optuna.create_study(direction="minimize")
     study.optimize(lambda trial: rl_loss(trial, monkey), n_trials=optuna_trials)
     best_params = study.best_trial.params

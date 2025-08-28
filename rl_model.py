@@ -54,13 +54,13 @@ class RL_env():
 			if deliver_reward<=self.p_reward:
 				reward = 1  # yes rewarded for picking the better option
 			else:
-				reward = -1  # not rewarded for picking the better option
+				reward = 0  # not rewarded for picking the better option
 		elif (action=='left' and correct=='right') or (action=='right' and correct=='left'):
 			accuracy = 0
 			if deliver_reward<=(1-self.p_reward):
 				reward = 1  # yes rewarded for picking the worse option
 			else:
-				reward = -1  # not rewarded for picking the worse option
+				reward = 0  # not rewarded for picking the worse option
 		else:
 			raise
 		self.correct = correct
@@ -105,13 +105,17 @@ class RL_model():
 			chosen.append('vr')
 			unchosen.append('vl')
 		alpha = self.params['alpha_plus'] if reward==1 else self.params['alpha_minus']
+		# gamma = self.params['gamma_u']
+		# gamma = alpha
+		unreward = 0 if reward==1 else 1
 		for attr in chosen:
 			val = getattr(self, attr)
 			updated = val + alpha * (reward - val)
 			setattr(self, attr, updated)
 		for attr in unchosen:
 			val = getattr(self, attr)
-			updated = (1 - self.params['gamma_u']) * val
+			updated = val + alpha * (unreward - val)  # equal and opposite update for unchosen
+			# updated = val + gamma * (0 - val)  # decay value for unchosen
 			setattr(self, attr, updated)
 		# update omega
 		drel = getattr(self, chosen[0]) - getattr(self, chosen[1])
@@ -132,6 +136,7 @@ def output_data(trial, env, model):
 		'trial_pre_reversal',
 		'trial_post_reversal',
 		'model_type',
+		'letl',
 		'va',
 		'vb',
 		'vl',
@@ -153,6 +158,7 @@ def output_data(trial, env, model):
 		trial_pre_reversal,
 		trial_post_reversal,
 		'rl',
+		env.left,
 		model.va,
 		model.vb,
 		model.vl,
@@ -189,7 +195,7 @@ if __name__ == "__main__":
 	# param_config = sys.argv[3]
 	param_config = sys.argv[1]
 	session_config = sys.argv[2]
-	sessions = [0,1,2,3] if session_config=='empirical' else range(100)
+	sessions = [0,1,2,3] if session_config=='empirical' else range(300)
 	for monkey in ['V', 'W']:
 		for session in sessions:
 			if param_config=='load':
@@ -199,7 +205,7 @@ if __name__ == "__main__":
 				params = {
 					'alpha_plus':rng.uniform(0.4, 0.6),
 					'alpha_minus':rng.uniform(0.4, 0.6),
-					'gamma_u':rng.uniform(0.2, 0.4),
+					# 'gamma_u':rng.uniform(0.4, 0.6),
 					'w0':rng.uniform(0.3, 0.6),
 					'alpha_w':rng.uniform(0.5, 0.8),
 					'gamma_w':rng.uniform(0.01, 0.05),
