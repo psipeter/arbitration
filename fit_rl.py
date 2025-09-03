@@ -83,13 +83,15 @@ def rl_loss(trial, monkey):
 	# 	'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.05, step=0.01),
 	# }
 	params = {
-		'fitting_trials': 30,
-		'alpha_plus':trial.suggest_float('alpha_plus', 0.1, 0.9, step=0.01),
-		'alpha_minus':trial.suggest_float('alpha_minus', 0.1, 0.9, step=0.01),
+		'fitting_trials': 100,
+		'alpha':trial.suggest_float('alpha', 0.01, 1.0, step=0.01),
+		'beta':trial.suggest_float('beta', 0.01, 1.0, step=0.01),
+		# 'alpha_plus':trial.suggest_float('alpha_plus', 0.1, 0.9, step=0.01),
+		# 'alpha_minus':trial.suggest_float('alpha_minus', 0.1, 0.9, step=0.01),
 		# 'gamma_u':trial.suggest_float('gamma_u', 0.1, 0.9, step=0.01),
-		'w0':trial.suggest_float('w0', 0.1, 0.9, step=0.01),
-		'alpha_w':trial.suggest_float('alpha_w', 0.1, 0.9, step=0.01),
-		'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.2, step=0.01),
+		# 'w0':trial.suggest_float('w0', 0.1, 0.9, step=0.01),
+		# 'alpha_w':trial.suggest_float('alpha_w', 0.1, 0.9, step=0.01),
+		# 'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.2, step=0.01),
 	}
 	data = run_to_fit(monkey, params)
 	loss = curve_rmse_loss(monkey, data)
@@ -108,9 +110,9 @@ def fit_rl(monkey, optuna_trials=100):
         params.append(value)
     print(f"{len(study.trials)} trials completed. Best value is {loss:.4}")
     performance_data = pd.DataFrame([[monkey, loss]], columns=['monkey', 'loss'])
-    performance_data.to_pickle(f"data/rl/{monkey}_performance.pkl")
+    performance_data.to_pickle(f"data/{monkey}_performance.pkl")
     fitted_params = pd.DataFrame([params], columns=param_names)
-    fitted_params.to_pickle(f"data/rl/{monkey}_params.pkl")
+    fitted_params.to_pickle(f"data/{monkey}_params.pkl")
     return performance_data, fitted_params
 
 if __name__ == '__main__':

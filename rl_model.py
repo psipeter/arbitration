@@ -76,8 +76,8 @@ class RL_model():
 		self.vb = 0
 		self.vl = 0  # V_Act1
 		self.vr = 0  # V_Act2
-		self.w = params['w0']
-		self.w0 = params['w0']
+		self.w = 0.5  # params['w0']
+		self.w0 = 0.5  # params['w0']
 		self.al = None
 		self.ar = None
 		self.cloc = None
@@ -104,7 +104,9 @@ class RL_model():
 		elif self.cloc == 'right':
 			chosen.append('vr')
 			unchosen.append('vl')
-		alpha = self.params['alpha_plus'] if reward==1 else self.params['alpha_minus']
+		alpha = self.params['alpha']
+		beta = self.params['beta']
+		# alpha = self.params['alpha_plus'] if reward==1 else self.params['alpha_minus']
 		# gamma = self.params['gamma_u']
 		# gamma = alpha
 		unreward = 0 if reward==1 else 1
@@ -120,7 +122,8 @@ class RL_model():
 		# update omega
 		drel = getattr(self, chosen[0]) - getattr(self, chosen[1])
 		wtar = 1 if drel>0 else 0
-		self.w = self.w + self.params['alpha_w']*np.abs(drel)*(wtar-self.w) + self.params['gamma_w']*(self.w0 - self.w)
+		self.w = self.w + beta * np.abs(drel) * (wtar-self.w)
+		# self.w = self.w + self.params['alpha_w']*np.abs(drel)*(wtar-self.w) + self.params['gamma_w']*(self.w0 - self.w)
 
 def output_data(trial, env, model):
 	block_type = 'what' if env.block<12 else 'where'
@@ -201,14 +204,15 @@ if __name__ == "__main__":
 			if param_config=='load':
 				params = pd.read_pickle(f"data/rl/{monkey}_params.pkl").iloc[0].to_dict()
 			elif param_config=='random':
-				rng = np.random.RandomState(seed = session + 4 if monkey=='W' else session)
+				rng = np.random.RandomState(seed = session + 1000 if monkey=='W' else session)
 				params = {
-					'alpha_plus':rng.uniform(0.4, 0.6),
-					'alpha_minus':rng.uniform(0.4, 0.6),
+					# 'alpha':rng.uniform(0.4, 0.6),
+					# 'alpha_plus':rng.uniform(0.4, 0.6),
+					# 'alpha_minus':rng.uniform(0.4, 0.6),
 					# 'gamma_u':rng.uniform(0.4, 0.6),
-					'w0':rng.uniform(0.3, 0.6),
-					'alpha_w':rng.uniform(0.5, 0.8),
-					'gamma_w':rng.uniform(0.01, 0.05),
+					# 'w0':rng.uniform(0.3, 0.6),
+					# 'alpha_w':rng.uniform(0.5, 0.8),
+					# 'gamma_w':rng.uniform(0.01, 0.05),
 				}
 			else:
 				print("Must specify which parameters to use")
