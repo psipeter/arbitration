@@ -5,6 +5,7 @@ import sys
 import time
 import optuna
 from rl_model import RL_env, RL_model, output_data #, run_rl_model
+import matplotlib.pyplot as plt
 
 def curve_rmse_loss(monkey, rl_data):
 	emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey")
@@ -15,7 +16,7 @@ def curve_rmse_loss(monkey, rl_data):
 	emp.rename(columns={'monkey_accuracy': 'acc'}, inplace=True)
 	emp.rename(columns={'reward': 'rew'}, inplace=True)
 	# emp['rew'] = emp['rew'].replace(0, -1)
-	emp['reward_seed'] = 'empirical'
+	emp['seed'] = 'empirical'
 	emp = emp.drop(columns=['left', 'right', 'correct', 'reversal_at_trial'])
 
 	rl_data["model_type"] = "rl"
@@ -35,7 +36,7 @@ def curve_rmse_loss(monkey, rl_data):
 					(combined[phase_col] > 0) &
 					(combined[phase_col] <= 30)
 				].copy()
-				grouped = sub_df.groupby([phase_col, 'block', 'reward_seed'])['acc'].mean()
+				grouped = sub_df.groupby([phase_col, 'block', 'seed'])['acc'].mean()
 				trial_means = grouped.groupby(level=0).mean()
 				for trial, acc in trial_means.items():
 					accs.append({'model_type': model,'block_type': block,'phase': phase_name,'trial': trial,'mean_acc': acc})
@@ -55,72 +56,90 @@ def curve_rmse_loss(monkey, rl_data):
 	total_loss = losses['rmse'].sum()
 	return total_loss
 
-def run_to_fit(monkey, params):
+# def NLL_loss(rl_data, monkey, params):
+# 	NLLs = []
+# 	emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey")
+# 	for session in emp['session'].unique():
+# 		for block in emp.query("session==@session")['block'].unique():
+# 			for trial in emp.query("session==@session & block==@block")['trial'].unique():
+# 				pls = rl_data.query("session==@session & block==@block & trial==@trial")['pl'].to_numpy()
+# 				prs = rl_data.query("session==@session & block==@block & trial==@trial")['pr'].to_numpy()
+# 				print(session, block, trial, prs)
+# 				monkey_choice = emp.query("session==@session & block==@block & trial==@trial")['cloc'].values[0]
+# 				if monkey_choice=='left':
+# 					NLL = -np.log(pls.mean())
+# 				elif monkey_choice=='right':
+# 					NLL = -np.log(prs.mean())
+# 				if NLL:
+# 					NLLs.append(NLL)
+# 	return np.mean(NLLs)
+
+def NLL_loss(rl_data, monkey, session):
+	emp = pd.read_pickle("data/empirical.pkl").query("monkey == @monkey & session==@session")
+	rl_agg = rl_data.groupby(["session", "block", "trial"], as_index=False)[["pl", "pr"]].mean()
+	merged = emp.merge(rl_agg, on=["session", "block", "trial"], how="inner")
+	eps = 1e-10  # Small value to avoid log(0)
+	merged["pl_safe"] = merged["pl"].clip(eps, 1 - eps)
+	merged["pr_safe"] = merged["pr"].clip(eps, 1 - eps)
+	merged["NLL"] = np.where(merged["cloc"] == "left", -np.log(merged["pl_safe"]), -np.log(merged["pr_safe"]))
+	return merged["NLL"].mean()
+
+def train_rl(optuna_trial, monkey, session, test=False, fitted_params=None):
+	session_block = []
+	emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey")
+	blocks = emp.query("session==@session")['block'].unique()
+	if test:
+		params = fitted_params.iloc[0].to_dict()
+	else:
+		params = {
+			'beta':optuna_trial.suggest_float('beta', 1e1, 1e2, step=1.0),
+			'alpha_plus':optuna_trial.suggest_float('alpha_plus', 0.3, 0.7, step=0.01),
+			'alpha_minus':optuna_trial.suggest_float('alpha_minus', 0.3, 0.7, step=0.01),
+			'gamma_u':optuna_trial.suggest_float('gamma_u', 0.1, 0.5, step=0.01),
+			'w0':optuna_trial.suggest_float('w0', 0.3, 0.7, step=0.01),
+			'alpha_w':optuna_trial.suggest_float('alpha_w', 0.2, 0.6, step=0.01),
+			'gamma_w':optuna_trial.suggest_float('gamma_w', 0.02, 0.2, step=0.01),
+		}
 	dfs = []
-	for ft in range(params['fitting_trials']):
-		for block in range(1, 25):
-			env = RL_env(monkey, ft, block, fitting=True, reward_seed=ft)
-			model = RL_model(params, env)
-			for trial in range(1, 81):
-				env.set_cue(trial)
-				model.act()
-				env.set_reward(trial, model.cloc)
-				model.update(env.reward)
-				df = output_data(trial, env, model)
-				dfs.append(df)
+	for b, block in enumerate(blocks):
+		print(f"session {session}, block {block}")
+		seed = block+100*session+1000 if monkey=='W' else block+100*session
+		trials = emp.query("session==@session & block==@block")['trial'].unique()
+		env = RL_env(monkey, session, block, seed=seed)
+		model = RL_model(params, env, seed=seed)
+		for trial in trials:
+			env.set_cue(trial)
+			model.act()
+			env.set_reward(trial, model)
+			model.update(env.reward)
+			df = output_data(trial, env, model)
+			dfs.append(df)
 	rl_data = pd.concat(dfs, ignore_index=True)
-	return rl_data
-
-
-def rl_loss(trial, monkey):
-	# params = {
-	# 	'fitting_trials': 20,
-	# 	'alpha_plus':trial.suggest_float('alpha_plus', 0.4, 0.6, step=0.01),
-	# 	'alpha_minus':trial.suggest_float('alpha_minus', 0.4, 0.6, step=0.01),
-	# 	'gamma_u':trial.suggest_float('gamma_u', 0.2, 0.4, step=0.01),
-	# 	'w0':trial.suggest_float('w0', 0.3, 0.6, step=0.01),
-	# 	'alpha_w':trial.suggest_float('alpha_w', 0.5, 0.8, step=0.01),
-	# 	'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.05, step=0.01),
-	# }
-	params = {
-		'fitting_trials': 100,
-		'alpha':trial.suggest_float('alpha', 0.01, 1.0, step=0.01),
-		'beta':trial.suggest_float('beta', 0.01, 1.0, step=0.01),
-		# 'alpha_plus':trial.suggest_float('alpha_plus', 0.1, 0.9, step=0.01),
-		# 'alpha_minus':trial.suggest_float('alpha_minus', 0.1, 0.9, step=0.01),
-		# 'gamma_u':trial.suggest_float('gamma_u', 0.1, 0.9, step=0.01),
-		# 'w0':trial.suggest_float('w0', 0.1, 0.9, step=0.01),
-		# 'alpha_w':trial.suggest_float('alpha_w', 0.1, 0.9, step=0.01),
-		# 'gamma_w':trial.suggest_float('gamma_w', 0.01, 0.2, step=0.01),
-	}
-	data = run_to_fit(monkey, params)
-	loss = curve_rmse_loss(monkey, data)
-	# print(data, loss)
+	if test:
+		rl_data.to_pickle(f"data/rl/monkey{monkey}_session{session}_values.pkl")
+	# loss = NLL_loss(rl_data, monkey, session)
+	loss = curve_rmse_loss(monkey, rl_data)
 	return loss
 
-def fit_rl(monkey, optuna_trials=100):
-    study = optuna.create_study(direction="minimize")
-    study.optimize(lambda trial: rl_loss(trial, monkey), n_trials=optuna_trials)
-    best_params = study.best_trial.params
-    loss = study.best_trial.value
-    param_names = ["monkey"]
-    params = [monkey]
-    for key, value in best_params.items():
-        param_names.append(key)
-        params.append(value)
-    print(f"{len(study.trials)} trials completed. Best value is {loss:.4}")
-    performance_data = pd.DataFrame([[monkey, loss]], columns=['monkey', 'loss'])
-    performance_data.to_pickle(f"data/{monkey}_performance.pkl")
-    fitted_params = pd.DataFrame([params], columns=param_names)
-    fitted_params.to_pickle(f"data/{monkey}_params.pkl")
-    return performance_data, fitted_params
+def fit_rl(monkey, session, optuna_trials=1000):
+	study = optuna.create_study(direction="minimize")
+	study.optimize(lambda optuna_trial: train_rl(optuna_trial, monkey, session), n_trials=optuna_trials)
+	best_params = study.best_params
+	best_loss = study.best_value
+	best_params['loss'] = best_loss
+	best_df = pd.DataFrame([best_params])
+	best_df.to_pickle(f"data/{monkey}_{session}_params.pkl")
+	print(best_df)
+	best_params = pd.read_pickle(f"data/{monkey}_{session}_params.pkl")
+	test_loss = train_rl(None, monkey, session, test=True, fitted_params=best_params)
+	print(f"test loss: {test_loss}")
+
 
 if __name__ == '__main__':
 	monkey = sys.argv[1]
-	print(f"fitting monkey {monkey}")
+	session = int(sys.argv[2])
+	print(f"fitting monkey {monkey} session {session}")
 	start = time.time()
-	performance_data, fitted_params = fit_rl(monkey)
+	fit_rl(monkey, session)
 	end = time.time()
-	print(performance_data)
-	print(fitted_params.iloc[0].to_dict())
 	print(f"runtime {(end-start)/60:.4} min")
