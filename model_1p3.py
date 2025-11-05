@@ -264,7 +264,7 @@ if __name__ == "__main__":
     seed += 1000 if monkey=='V' else 2000
     s = time.time()
     dfs = []
-    for perturb in [-0.2,-0.1,0.0,0.1,0.2]:
+    for perturb in np.linspace(-0.3,0.3,13):
         env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
         net = build_network(env, seed_network=seed)
         df = simulate_values_spikes(net)
