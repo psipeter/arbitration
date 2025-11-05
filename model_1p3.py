@@ -217,7 +217,6 @@ def simulate_values_spikes(net):
     session = env.session
     block = env.block
     perturb = env.perturb
-    # block_type = env.block_type
     block_type = 'what' if block<=12 else 'where'
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
@@ -253,21 +252,25 @@ def simulate_values_spikes(net):
             post = trial - reversal_at_trial if trial>=reversal_at_trial else -1
             df = pd.DataFrame([[monkey, session, block, trial, block_type, perturb, pre, post,
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
-            filename = f"data/nef/monkey{monkey}_session{session}_block{block}_trial{trial}_perturb{perturb}"
-            df.to_pickle(filename+"_values.pkl")
-            # np.savez_compressed(filename+"_spikes.npz", vwa=svwa, evc=sevc, a=sa)
+            dfs.append(df)
+    data = pd.concat(dfs, ignore_index=True)
+    return data
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
     block = int(sys.argv[3])
-    # perturb = sys.argv[4]
     seed = block + 100*session
     seed += 1000 if monkey=='V' else 2000
     s = time.time()
-    for perturb in np.linspace(-0.2, 0.2, 5):
+    dfs = []
+    for perturb in [-0.2,-0.1,0.0,0.1,0.2]:
         env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
         net = build_network(env, seed_network=seed)
-        simulate_values_spikes(net)
+        df = simulate_values_spikes(net)
+        dfs.append(df)
+    filename = f"data/nef/monkey{monkey}_session{session}_block{block}"
+    data = pd.concat(dfs, ignore_index=True)
+    data.to_pickle(filename+"_values.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
