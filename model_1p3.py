@@ -6,14 +6,16 @@ import scipy
 import pandas as pd
 import sys
 import gc
+import time
 
 class Environment():
-    def __init__(self, monkey, session, block, seed,
+    def __init__(self, monkey, session, block, seed, perturb,
                 t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.monkey = monkey
         self.session = session
         self.block = block
+        self.perturb = perturb
         self.rng = np.random.RandomState(seed=seed)
         self.t_cue = t_cue
         self.t_reward = t_reward
@@ -91,6 +93,8 @@ class Environment():
         return self.reward
     def sample_phase(self, t):
         return [self.cue_phase, self.feedback_phase]
+    def sample_perturb(self, t):
+        return self.perturb if self.cue_phase else 0
 
 def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
@@ -111,6 +115,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         in_decay = nengo.Node(lambda t: env.sample_decay(t))
         in_phase = nengo.Node(lambda t: env.sample_phase(t))
         in_w0 = nengo.Node(env.params['w0'])
+        in_perturb = nengo.Node(lambda t: env.sample_perturb(t))
         
         # ensembles and nodes
         f = nengo.Ensemble(n_neurons, 4)
@@ -138,6 +143,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
         cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=pes)
         cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: env.params['w0'], learning_rule_type=pes)
+        cp = nengo.Connection(in_perturb, w, synapse=None)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
         nengo.Connection(in_letter, vlet[2:4])
@@ -205,18 +211,19 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
 def simulate_values_spikes(net):
     dfs = []
-    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'pre', 'post', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
+    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'perturb', 'pre', 'post', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
     env = net.env
     monkey = env.monkey
     session = env.session
     block = env.block
+    perturb = env.perturb
     # block_type = env.block_type
     block_type = 'what' if block<=12 else 'where'
     sim = nengo.Simulator(net, dt=env.dt, progress_bar=False)
     labels = ['value', 'omega', 'action', 'mixed', 'error', 'reliability']
     with sim:
         for trial in env.empirical.query("monkey==@monkey & session==@session & block==@block")['trial'].unique():
-            print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}")
+            print(f"running monkey {env.monkey}, session {session}, block {block}, trial {trial}, perturb {perturb}")
             net.env.set_cue(block, trial)
             sim.run(net.env.t_cue)
             t_choice = sim.trange().shape[0]
@@ -244,9 +251,9 @@ def simulate_values_spikes(net):
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             pre = trial if trial<reversal_at_trial else -1
             post = trial - reversal_at_trial if trial>=reversal_at_trial else -1
-            df = pd.DataFrame([[monkey, session, block, trial, block_type, pre, post,
+            df = pd.DataFrame([[monkey, session, block, trial, block_type, perturb, pre, post,
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
-            filename = f"data/nef/monkey{monkey}_session{session}_block{block}_trial{trial}"
+            filename = f"data/nef/monkey{monkey}_session{session}_block{block}_trial{trial}_perturb{perturb}"
             df.to_pickle(filename+"_values.pkl")
             # np.savez_compressed(filename+"_spikes.npz", vwa=svwa, evc=sevc, a=sa)
 
@@ -254,8 +261,13 @@ if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
     block = int(sys.argv[3])
+    # perturb = sys.argv[4]
     seed = block + 100*session
     seed += 1000 if monkey=='V' else 2000
-    env = Environment(monkey=monkey, session=session, block=block, seed=seed)
-    net = build_network(env, seed_network=seed)
-    simulate_values_spikes(net)
+    s = time.time()
+    for perturb in np.linspace(-0.2, 0.2, 5):
+        env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
+        net = build_network(env, seed_network=seed)
+        simulate_values_spikes(net)
+    e = time.time()
+    print(f"runtime (min): {(e-s)/60:.4}")
