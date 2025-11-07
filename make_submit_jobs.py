@@ -18,7 +18,7 @@ for monkey in ['V', 'W']:
 				rsh.write("\n")
 				rsh.write('''#SBATCH --ntasks-per-node=1''')
 				rsh.write("\n")
-				rsh.write('''#SBATCH --time=2:00:0''')
+				rsh.write('''#SBATCH --time=0:5:0''')
 				rsh.write("\n")
 				rsh.write(fit_string)
 

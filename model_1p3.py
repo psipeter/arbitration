@@ -32,10 +32,9 @@ class Environment():
             'alpha_v':self.rng.uniform(0.4, 0.6),
             'gamma_v':self.rng.uniform(0.9, 1.0),
             # 'w0':self.rng.uniform(0.4, 0.6),
-            'alpha_w':self.rng.uniform(0.2, 0.4),
-            'gamma_w':self.rng.uniform(0.05, 0.15),
+            'alpha_w':self.rng.uniform(0.3, 0.5),
+            'gamma_w':self.rng.uniform(0.05, 0.10),
             'w0':0.5,
-            'neurons':1000,
         }
     def set_cue(self, block, trial):
         monkey = self.monkey
@@ -211,7 +210,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
 def simulate_values_spikes(net):
     dfs = []
-    columns = ['monkey', 'session', 'block', 'trial', 'block_type', 'perturb', 'pre', 'post', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
+    columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -248,9 +247,8 @@ def simulate_values_spikes(net):
             # sevc = sim.data[net.s_evc][t_choice:t1].sum(axis=0) / 1000
             # sa = sim.data[net.s_a][t_choice:t1].sum(axis=0) / 1000
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
-            pre = trial if trial<reversal_at_trial else -1
-            post = trial - reversal_at_trial if trial>=reversal_at_trial else -1
-            df = pd.DataFrame([[monkey, session, block, trial, block_type, perturb, pre, post,
+            trial_rev = trial.astype('int64') - reversal_at_trial.astype('int64')
+            df = pd.DataFrame([[monkey, session, block, trial, trial_rev, block_type, perturb,
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
             dfs.append(df)
     data = pd.concat(dfs, ignore_index=True)
@@ -264,7 +262,8 @@ if __name__ == "__main__":
     seed += 1000 if monkey=='V' else 2000
     s = time.time()
     dfs = []
-    for perturb in np.linspace(-0.3,0.3,13):
+    # for perturb in np.linspace(-0.3,0.3,13):
+    for perturb in [0.0]:
         env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
         net = build_network(env, seed_network=seed)
         df = simulate_values_spikes(net)
