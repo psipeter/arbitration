@@ -7,6 +7,7 @@ import pandas as pd
 import sys
 import gc
 import time
+import pickle
 
 class Environment():
     def __init__(self, monkey, session, block, seed, perturb,
@@ -201,7 +202,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         # net.p_evuout = nengo.Probe(evuout)
         # net.p_drelout = nengo.Probe(drelout)
         # net.p_wtarout = nengo.Probe(wtarout)
-        # net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
         # net.s_evc = nengo.Probe(evc.neurons, synapse=None)
         # net.s_a = nengo.Probe(a.neurons, synapse=None)
 
@@ -210,6 +211,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
 def simulate_values_spikes(net):
     dfs = []
+    spikes = {}
     columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
     env = net.env
     monkey = env.monkey
@@ -235,7 +237,7 @@ def simulate_values_spikes(net):
             w = sim.data[net.p_w][t0:t_choice,0].mean()
             al = sim.data[net.p_a][t0:t_choice,0].mean()
             ar = sim.data[net.p_a][t0:t_choice,1].mean()
-            # svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
+            svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
             env.set_action(sim, net)
             env.set_reward(block, trial)
             clet = 'A' if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 'B'
@@ -251,8 +253,9 @@ def simulate_values_spikes(net):
             df = pd.DataFrame([[monkey, session, block, trial, trial_rev, block_type, perturb,
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
             dfs.append(df)
-    data = pd.concat(dfs, ignore_index=True)
-    return data
+            spikes[trial] = svwa
+    values = pd.concat(dfs, ignore_index=True)
+    return values, spikes
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -261,15 +264,21 @@ if __name__ == "__main__":
     seed = block + 100*session
     seed += 1000 if monkey=='V' else 2000
     s = time.time()
-    dfs = []
+    # dfs = []
+    # spikes = {}
     # for perturb in np.linspace(-0.3,0.3,13):
-    for perturb in [0.0]:
-        env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
-        net = build_network(env, seed_network=seed)
-        df = simulate_values_spikes(net)
-        dfs.append(df)
+        # env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
+        # net = build_network(env, seed_network=seed)
+        # value, spike = simulate_values_spikes(net)
+        # dfs.append(value)
+        # spikes[perturb] = spike
+    # values = pd.concat(dfs, ignore_index=True)
+    env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=0)
+    net = build_network(env, seed_network=seed)
+    values, spikes = simulate_values_spikes(net)
     filename = f"data/nef/monkey{monkey}_session{session}_block{block}"
-    data = pd.concat(dfs, ignore_index=True)
-    data.to_pickle(filename+"_values.pkl")
+    values.to_pickle(filename+"_values.pkl")
+    with open(filename+"_spikes.pkl", "wb") as f:
+        pickle.dump(spikes, f)
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
