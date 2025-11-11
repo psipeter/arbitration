@@ -10,14 +10,14 @@ import time
 import pickle
 
 class Environment():
-    def __init__(self, monkey, session, block, seed, perturb,
+    def __init__(self, monkey, session, block, seed_reward, perturb, params,
                 t_cue=0.5, t_reward=0.5, dt=0.001, p_reward=0.7):
         self.empirical = pd.read_pickle("data/empirical.pkl")
         self.monkey = monkey
         self.session = session
         self.block = block
         self.perturb = perturb
-        self.rng = np.random.RandomState(seed=seed)
+        self.rng = np.random.default_rng(seed=seed_reward)
         self.t_cue = t_cue
         self.t_reward = t_reward
         self.dt = dt
@@ -29,14 +29,7 @@ class Environment():
         self.action = [0]
         self.feedback_phase = 0
         self.cue_phase = 0
-        self.params = {
-            'alpha_v':self.rng.uniform(0.4, 0.6),
-            'gamma_v':self.rng.uniform(0.9, 1.0),
-            # 'w0':self.rng.uniform(0.4, 0.6),
-            'alpha_w':self.rng.uniform(0.3, 0.5),
-            'gamma_w':self.rng.uniform(0.05, 0.10),
-            'w0':0.5,
-        }
+        self.params = params
     def set_cue(self, block, trial):
         monkey = self.monkey
         session = self.session
@@ -205,6 +198,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
         # net.s_evc = nengo.Probe(evc.neurons, synapse=None)
         # net.s_a = nengo.Probe(a.neurons, synapse=None)
+        # net.w = w
 
     return net
 
@@ -254,6 +248,7 @@ def simulate_values_spikes(net):
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
             dfs.append(df)
             spikes[trial] = svwa
+            # print(sim.data[net.w].encoders)
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
@@ -261,8 +256,17 @@ if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
     block = int(sys.argv[3])
-    seed = block + 100*session
-    seed += 1000 if monkey=='V' else 2000
+    seed_network = session if monkey=='V' else session + 100
+    seed_reward = block + 100*session + 1000 if monkey=='V' else block + 100*session + 2000
+    rng_network = np.random.default_rng(seed=seed_network)
+    params = {
+        'alpha_v':rng_network.uniform(0.4, 0.6),
+        'gamma_v':rng_network.uniform(0.9, 1.0),
+        # 'w0':rng_network.uniform(0.4, 0.6),
+        'alpha_w':rng_network.uniform(0.3, 0.5),
+        'gamma_w':rng_network.uniform(0.05, 0.10),
+        'w0':0.5,
+    }
     s = time.time()
     # dfs = []
     # spikes = {}
@@ -273,8 +277,8 @@ if __name__ == "__main__":
         # dfs.append(value)
         # spikes[perturb] = spike
     # values = pd.concat(dfs, ignore_index=True)
-    env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=0)
-    net = build_network(env, seed_network=seed)
+    env = Environment(monkey=monkey, session=session, block=block, seed_reward=seed_reward, params=params, perturb=0)
+    net = build_network(env, seed_network=seed_network)
     values, spikes = simulate_values_spikes(net)
     filename = f"data/nef/monkey{monkey}_session{session}_block{block}"
     values.to_pickle(filename+"_values.pkl")
