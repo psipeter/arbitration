@@ -206,7 +206,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 def simulate_values_spikes(net):
     dfs = []
     spikes = {}
-    columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc']
+    columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc', 'dvs', 'dva']
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -239,16 +239,12 @@ def simulate_values_spikes(net):
             acc = 1 if (cloc=='left' and env.correct=='left') or (cloc=='right' and env.correct=='right') else 0
             rew = 1 if env.reward[0]==1 else -1
             sim.run(net.env.t_reward)
-            # t1 = t_choice + 100  # 100ms following choice / reward delivery
-            # sevc = sim.data[net.s_evc][t_choice:t1].sum(axis=0) / 1000
-            # sa = sim.data[net.s_a][t_choice:t1].sum(axis=0) / 1000
             reversal_at_trial = env.empirical.query("monkey==@monkey & session==@session & block==@block")['reversal_at_trial'].unique()[0]
             trial_rev = trial.astype('int64') - reversal_at_trial.astype('int64')
             df = pd.DataFrame([[monkey, session, block, trial, trial_rev, block_type, perturb,
-                va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc]], columns=columns)
+                va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc, va-vb, vl-vr]], columns=columns)
             dfs.append(df)
             spikes[trial] = svwa
-            # print(sim.data[net.w].encoders)
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
