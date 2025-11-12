@@ -198,7 +198,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         # net.p_wtarout = nengo.Probe(wtarout)
         net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
         # net.s_evc = nengo.Probe(evc.neurons, synapse=None)
-        # net.s_a = nengo.Probe(a.neurons, synapse=None)
+        net.s_a = nengo.Probe(a.neurons, synapse=None)
         # net.w = w
 
     return net
@@ -206,7 +206,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 
 def simulate_values_spikes(net):
     dfs = []
-    spikes = {}
+    spikes = {'vwa':{}, 'a':{}}
     columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'omega', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc', 'dvs', 'dva']
     env = net.env
     monkey = env.monkey
@@ -233,6 +233,7 @@ def simulate_values_spikes(net):
             al = sim.data[net.p_a][t0:t_choice,0].mean()
             ar = sim.data[net.p_a][t0:t_choice,1].mean()
             svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
+            sa = sim.data[net.s_a][t0:t_choice].sum(axis=0) / 1000
             env.set_action(sim, net)
             env.set_reward(block, trial)
             clet = 'A' if (env.action==[1] and env.letter==[1]) or (env.action==[-1] and env.letter==[-1]) else 'B'
@@ -245,7 +246,8 @@ def simulate_values_spikes(net):
             df = pd.DataFrame([[monkey, session, block, trial, trial_rev, block_type, perturb,
                 va, vb, vl, vr, w, al, ar, clet, cloc, rew, acc, va-vb, vl-vr]], columns=columns)
             dfs.append(df)
-            spikes[trial] = svwa
+            spikes['vwa'][trial] = svwa
+            spikes['a'][trial] = sa
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
@@ -257,18 +259,16 @@ if __name__ == "__main__":
     seed_network = session if monkey=='V' else session + 100
     seed_reward = block + 100*session + 1000 if monkey=='V' else block + 100*session + 2000
     if param_config=='load':
-        # from Jao's simpler RL model fit to the monkey data
-        with open("data/rl_fitted_params.json") as f:
+        with open("data/rl_fitted_params.json") as f:  # from Jao's simpler RL model fit to the monkey data
             params = json.load(f)[monkey][str(session)]
     elif param_config=='random':
         rng_network = np.random.default_rng(seed=seed_network)
         params = {
             'alpha_v':rng_network.uniform(0.4, 0.6),
             'gamma_v':rng_network.uniform(0.9, 1.0),
-            # 'w0':rng_network.uniform(0.4, 0.6),
+            'w0':rng_network.uniform(0.4, 0.6),
             'alpha_w':rng_network.uniform(0.3, 0.5),
             'gamma_w':rng_network.uniform(0.05, 0.10),
-            'w0':0.5,
         }
     s = time.time()
     env = Environment(monkey=monkey, session=session, block=block, seed_reward=seed_reward, params=params, perturb=0)
