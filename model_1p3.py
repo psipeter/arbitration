@@ -8,6 +8,7 @@ import sys
 import gc
 import time
 import pickle
+import json
 
 class Environment():
     def __init__(self, monkey, session, block, seed_reward, perturb, params,
@@ -206,7 +207,7 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
 def simulate_values_spikes(net):
     dfs = []
     spikes = {}
-    columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'w', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc', 'dvs', 'dva']
+    columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb', 'va', 'vb', 'vl', 'vr', 'omega', 'al', 'ar', 'clet', 'cloc', 'rew', 'acc', 'dvs', 'dva']
     env = net.env
     monkey = env.monkey
     session = env.session
@@ -252,27 +253,24 @@ if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
     block = int(sys.argv[3])
+    param_config = 'load'
     seed_network = session if monkey=='V' else session + 100
     seed_reward = block + 100*session + 1000 if monkey=='V' else block + 100*session + 2000
-    rng_network = np.random.default_rng(seed=seed_network)
-    params = {
-        'alpha_v':rng_network.uniform(0.4, 0.6),
-        'gamma_v':rng_network.uniform(0.9, 1.0),
-        # 'w0':rng_network.uniform(0.4, 0.6),
-        'alpha_w':rng_network.uniform(0.3, 0.5),
-        'gamma_w':rng_network.uniform(0.05, 0.10),
-        'w0':0.5,
-    }
+    if param_config=='load':
+        # from Jao's simpler RL model fit to the monkey data
+        with open("data/rl_fitted_params.json") as f:
+            params = json.load(f)[monkey][str(session)]
+    elif param_config=='random':
+        rng_network = np.random.default_rng(seed=seed_network)
+        params = {
+            'alpha_v':rng_network.uniform(0.4, 0.6),
+            'gamma_v':rng_network.uniform(0.9, 1.0),
+            # 'w0':rng_network.uniform(0.4, 0.6),
+            'alpha_w':rng_network.uniform(0.3, 0.5),
+            'gamma_w':rng_network.uniform(0.05, 0.10),
+            'w0':0.5,
+        }
     s = time.time()
-    # dfs = []
-    # spikes = {}
-    # for perturb in np.linspace(-0.3,0.3,13):
-        # env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
-        # net = build_network(env, seed_network=seed)
-        # value, spike = simulate_values_spikes(net)
-        # dfs.append(value)
-        # spikes[perturb] = spike
-    # values = pd.concat(dfs, ignore_index=True)
     env = Environment(monkey=monkey, session=session, block=block, seed_reward=seed_reward, params=params, perturb=0)
     net = build_network(env, seed_network=seed_network)
     values, spikes = simulate_values_spikes(net)
@@ -282,3 +280,14 @@ if __name__ == "__main__":
         pickle.dump(spikes, f)
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
+
+
+        # dfs = []
+    # spikes = {}
+    # for perturb in np.linspace(-0.3,0.3,13):
+        # env = Environment(monkey=monkey, session=session, block=block, seed=seed, perturb=perturb)
+        # net = build_network(env, seed_network=seed)
+        # value, spike = simulate_values_spikes(net)
+        # dfs.append(value)
+        # spikes[perturb] = spike
+    # values = pd.concat(dfs, ignore_index=True)
