@@ -7,7 +7,7 @@ import time
 for monkey in ['V', 'W']:
 	for session in range(4):
 		for block in range(1,25):
-			fit_string = f"python model_1p3.py {monkey} {session} {block}"
+			fit_string = f"python model_2p0.py {monkey} {session} {block}"
 			file_string = f'job_nef_{monkey}_{session}_{block}.sh'
 			with open (file_string, 'w') as rsh:
 				rsh.write('''#!/bin/bash''')
