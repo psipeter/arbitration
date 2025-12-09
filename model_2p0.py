@@ -237,8 +237,8 @@ def simulate_values_spikes(net):
                 ev,ew,
                 clet, cloc, rew, acc, va-vb, vl-vr]], columns=columns)
             dfs.append(df)
-            # spikes['vwa'][trial] = svwa
-            # spikes['a'][trial] = sa
+            spikes['vwa'][trial] = svwa
+            spikes['a'][trial] = sa
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     values, spikes = simulate_values_spikes(net)
     filename = f"data/nef/monkey{monkey}_session{session}_block{block}"
     values.to_pickle(filename+"_values.pkl")
-    # with open(filename+"_spikes.pkl", "wb") as f:
-    #     pickle.dump(spikes, f)
-    # e = time.time()
+    with open(filename+"_spikes.pkl", "wb") as f:
+        pickle.dump(spikes, f)
+    e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
