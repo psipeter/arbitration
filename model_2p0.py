@@ -216,8 +216,8 @@ def simulate_values_spikes(net):
             w = sim.data[net.p_w][t0:t_choice,0].mean()
             al = sim.data[net.p_a][t0:t_choice,0].mean()
             ar = sim.data[net.p_a][t0:t_choice,1].mean()
-            # svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
-            # sa = sim.data[net.s_a][t0:t_choice].sum(axis=0) / 1000
+            svwa = sim.data[net.s_vwa][t0:t_choice].sum(axis=0) / 1000
+            sa = sim.data[net.s_a][t0:t_choice].sum(axis=0) / 1000
             env.set_action(sim, net)
             env.set_reward(block, trial)
             env.set_wt(sim, net)
