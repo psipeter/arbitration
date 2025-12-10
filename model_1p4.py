@@ -226,7 +226,7 @@ def simulate_values_spikes(net):
             t_start = sim.trange().shape[0]
             sim.run(net.env.t_cue)
             t_choice = sim.trange().shape[0]
-            t0 = t_choice - 100  # 100ms prior to choice
+            t0 = t_choice - 20  # 20ms prior to choice
             va = sim.data[net.p_v][t0:t_choice,0].mean() if env.letter==[1] else sim.data[net.p_v][t0:t_choice,1].mean()
             vb = sim.data[net.p_v][t0:t_choice,1].mean() if env.letter==[1] else sim.data[net.p_v][t0:t_choice,0].mean()
             vl = sim.data[net.p_v][t0:t_choice,2].mean()
@@ -257,7 +257,7 @@ def simulate_values_spikes(net):
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
-def save_spikes_hdf5_binned(spikes, filename, bin_size=100):
+def save_spikes_hdf5_binned(spikes, filename, bin_size=20):
     """
     Save NEF spike data (T × N) into HDF5, binning spikes into bin_size-ms windows (same as monkey spike binning).
     spikes[label][trial] -> ndarray shaped (T, N)
