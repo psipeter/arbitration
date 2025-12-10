@@ -257,22 +257,22 @@ def simulate_values_spikes(net):
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
-def save_spikes_hdf5(spikes, filename):
+def save_spikes_hdf5_binned(spikes, filename, bin_size=100):
     """
-    Save nested spike dict spikes[label][trial] -> ndarray
-    into HDF5 with gzip compression.
+    Save NEF spike data (T × N) into HDF5, binning spikes into bin_size-ms windows (same as monkey spike binning).
+    spikes[label][trial] -> ndarray shaped (T, N)
     """
     with h5py.File(filename, "w") as f:
         for label, trial_dict in spikes.items():
             grp = f.create_group(label)
             for trial, arr in trial_dict.items():
-                grp.create_dataset(
-                    str(trial),
-                    data=arr,
-                    compression="gzip",
-                    compression_opts=4,   # good default
-                    shuffle=True          # improves compression
-                )
+                T, n_neurons = arr.shape
+                n_bins = T // bin_size
+                T_use = n_bins * bin_size
+                arr = arr[:T_use, :]
+                arr_binned = arr.reshape(n_bins, bin_size, n_neurons).sum(axis=1)
+                grp.create_dataset(str(trial), data=arr_binned, compression="gzip", compression_opts=4, shuffle=True)
+
 
 if __name__ == "__main__":
     monkey = sys.argv[1]
@@ -300,8 +300,6 @@ if __name__ == "__main__":
     values, spikes = simulate_values_spikes(net)
     filename = f"data/nef/monkey{monkey}_session{session}_block{block}"
     values.to_pickle(filename+"_values.pkl")
-    save_spikes_hdf5(spikes, filename + "_spikes.h5")
-    # with open(filename+"_spikes.pkl", "wb") as f:
-    #     pickle.dump(spikes, f)
+    save_spikes_hdf5_binned(spikes, filename + "_spikes.h5")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
