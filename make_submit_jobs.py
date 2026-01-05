@@ -12,13 +12,13 @@ for monkey in ['V', 'W']:
 			with open (file_string, 'w') as rsh:
 				rsh.write('''#!/bin/bash''')
 				rsh.write("\n")
-				rsh.write('''#SBATCH --mem=64G''')
+				rsh.write('''#SBATCH --mem=32G''')
 				rsh.write("\n")
 				rsh.write('''#SBATCH --nodes=1''')
 				rsh.write("\n")
 				rsh.write('''#SBATCH --ntasks-per-node=1''')
 				rsh.write("\n")
-				rsh.write('''#SBATCH --time=1:00:0''')
+				rsh.write('''#SBATCH --time=0:30:0''')
 				rsh.write("\n")
 				rsh.write(fit_string)
 
@@ -27,4 +27,4 @@ for monkey in ['V', 'W']:
 		for block in range(1,25):
 			submit_string = ["sbatch", f"job_nef_{monkey}_{session}_{block}.sh"]
 			a = subprocess.run(submit_string)
-			time.sleep(1)  # wait a few seconds before next submission to help out SLURM system
+			time.sleep(2)  # wait a few seconds before next submission to help out SLURM system

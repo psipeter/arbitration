@@ -219,7 +219,8 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=2e-5):
 
 def simulate_values_spikes(net):
     dfs = []
-    spikes = {'vwa':{}, 'a':{}}
+    # spikes = {'vwa':{}, 'a':{}}
+    spikes = {}
     columns = ['monkey', 'session', 'block', 'trial', 'trial_rev', 'block_type', 'perturb',
                 'va', 'vb', 'vl', 'vr', 'omega', 'al', 'ar',
                 'clet', 'cloc', 'rew', 'acc', 'dvs', 'dva']
@@ -266,26 +267,28 @@ def simulate_values_spikes(net):
                 va, vb, vl, vr, w, al, ar,
                 clet, cloc, rew, acc, va-vb, vl-vr]], columns=columns)
             dfs.append(df)
-            spikes['vwa'][trial] = svwa
-            spikes['a'][trial] = sa
+            # spikes['vwa'][trial] = svwa
+            # spikes['a'][trial] = sa
+            spikes[trial] = sa
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
-def save_spikes_hdf5_binned(spikes, filename, bin_size=20):
+def save_spikes_hdf5_binned(spikes, filename, bin_size=100):
     """
     Save NEF spike data (T × N) into HDF5, binning spikes into bin_size-ms windows (same as monkey spike binning).
     spikes[label][trial] -> ndarray shaped (T, N)
     """
     with h5py.File(filename, "w") as f:
-        for label, trial_dict in spikes.items():
-            grp = f.create_group(label)
-            for trial, arr in trial_dict.items():
-                T, n_neurons = arr.shape
-                n_bins = T // bin_size
-                T_use = n_bins * bin_size
-                arr = arr[:T_use, :]
-                arr_binned = arr.reshape(n_bins, bin_size, n_neurons).sum(axis=1)
-                grp.create_dataset(str(trial), data=arr_binned, compression="gzip", compression_opts=4, shuffle=True)
+        # for label, trial_dict in spikes.items():
+            # grp = f.create_group(label)
+            # for trial, arr in trial_dict.items():
+        for trial, arr in spikes.items():
+            T, n_neurons = arr.shape
+            n_bins = T // bin_size
+            T_use = n_bins * bin_size
+            arr = arr[:T_use, :]
+            arr_binned = arr.reshape(n_bins, bin_size, n_neurons).sum(axis=1)
+            f.create_dataset(str(trial), data=arr_binned, compression="gzip", compression_opts=4, shuffle=True)
 
 
 if __name__ == "__main__":
