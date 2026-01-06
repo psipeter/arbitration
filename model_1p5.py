@@ -278,7 +278,7 @@ def simulate_values_spikes(net):
     values = pd.concat(dfs, ignore_index=True)
     return values, spikes
 
-def save_spikes_hdf5_binned(spikes, filename, bin_size=100):
+def save_spikes_hdf5_binned(spikes, filename, bin_size=10):
     """
     Save NEF spike data (T × N) into HDF5, binning spikes into bin_size-ms windows (same as monkey spike binning).
     spikes[trial] -> ndarray shaped (T, N)
