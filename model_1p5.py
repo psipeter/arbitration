@@ -103,7 +103,7 @@ class Environment():
     def sample_perturb(self, t):
         return self.perturb if self.cue_phase else 0
 
-def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=2e-5):
+def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net = nengo.Network(seed=seed_network)
     net.env = env
     net.config[nengo.Connection].synapse = None
@@ -149,8 +149,9 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=2e-5):
         nengo.Connection(in_f, f)
         nengo.Connection(in_g, g)
 
-        cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=pes)
-        cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: env.params['w0'], learning_rule_type=pes)
+        cf = nengo.Connection(f[:2], v[:2], synapse=0.01, transform=0, learning_rule_type=pes)  # learned connection for letters
+        cf = nengo.Connection(f[2:], v[2:], synapse=0.01, transform=0, learning_rule_type=pes/2)  # learned connection for locations
+        cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: env.params['w0'], learning_rule_type=pes)  # learned connection for omega
         cp = nengo.Connection(in_perturb, w, synapse=None)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
@@ -276,12 +277,9 @@ def simulate_values_spikes(net):
 def save_spikes_hdf5_binned(spikes, filename, bin_size=100):
     """
     Save NEF spike data (T × N) into HDF5, binning spikes into bin_size-ms windows (same as monkey spike binning).
-    spikes[label][trial] -> ndarray shaped (T, N)
+    spikes[trial] -> ndarray shaped (T, N)
     """
     with h5py.File(filename, "w") as f:
-        # for label, trial_dict in spikes.items():
-            # grp = f.create_group(label)
-            # for trial, arr in trial_dict.items():
         for trial, arr in spikes.items():
             T, n_neurons = arr.shape
             n_bins = T // bin_size
@@ -299,9 +297,12 @@ if __name__ == "__main__":
     seed_network = session if monkey=='V' else session + 100
     seed_reward = block + 100*session + 1000 if monkey=='V' else block + 100*session + 2000
     if param_config=='load':
-        with open("data/rl_fitted_params.json") as f:  # from Jao's simpler RL model fit to the monkey data
+        with open("data/rl_fitted_params.json") as f:  # from Jay's simpler RL model fit to the monkey data
             params = json.load(f)[monkey][str(session)]
         params['ff'] = 0.2
+        params['alpha_w'] = 2*params['alpha_w']  # try this to boost omega dynamics
+        print(params)
+        raise
     elif param_config=='random':
         rng_network = np.random.default_rng(seed=seed_network)
         params = {
