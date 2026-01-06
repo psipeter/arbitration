@@ -109,7 +109,9 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
     net.config[nengo.Connection].synapse = None
     net.config[nengo.Probe].synapse = 0.01
     winh = -1000*np.ones((n_neurons, 1))
-    pes = nengo.PES(learning_rate=alpha_pes)
+    pes_loc = nengo.PES(learning_rate=alpha_pes/2)
+    pes_let = nengo.PES(learning_rate=alpha_pes)
+    pes_w = nengo.PES(learning_rate=alpha_pes)
 
     with net:
         # inputs
@@ -149,9 +151,9 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(in_f, f)
         nengo.Connection(in_g, g)
 
-        cf = nengo.Connection(f[:2], v[:2], synapse=0.01, transform=0, learning_rule_type=pes)  # learned connection for letters
-        cf = nengo.Connection(f[2:], v[2:], synapse=0.01, transform=0, learning_rule_type=pes/2)  # learned connection for locations
-        cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: env.params['w0'], learning_rule_type=pes)  # learned connection for omega
+        cf = nengo.Connection(f[:2], v[:2], synapse=0.01, transform=0, learning_rule_type=pes_let)  # learned connection for letters
+        cf2 = nengo.Connection(f[2:], v[2:], synapse=0.01, transform=0, learning_rule_type=pes_loc)  # learned connection for locations
+        cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: env.params['w0'], learning_rule_type=pes_w)  # learned connection for omega
         cp = nengo.Connection(in_perturb, w, synapse=None)
 
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)
@@ -188,8 +190,10 @@ def build_network(env, n_neurons=3000, seed_network=0, alpha_pes=3e-5):
         nengo.Connection(w, ewd, synapse=0.01, transform=-1)
         nengo.Connection(in_phase[0], ewd.neurons, transform=winh)
 
-        nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.params['alpha_v'], function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
-        nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.params['gamma_v'], function=lambda x: [x[0]*x[4], x[1]*x[5], x[2]*x[6], x[3]*x[7]])
+        nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=env.params['alpha_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let
+        nengo.Connection(evc, cf2.learning_rule, synapse=0.01, transform=env.params['alpha_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc
+        nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-env.params['gamma_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let
+        nengo.Connection(evu, cf2.learning_rule, synapse=0.01, transform=-env.params['gamma_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc
         nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-env.params['alpha_w'])
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-env.params['gamma_w'])
 
