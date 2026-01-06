@@ -27,4 +27,4 @@ for monkey in ['V', 'W']:
 		for block in range(1,25):
 			submit_string = ["sbatch", f"job_nef_{monkey}_{session}_{block}.sh"]
 			a = subprocess.run(submit_string)
-			time.sleep(2)  # wait a few seconds before next submission to help out SLURM system
+			time.sleep(1)  # wait a few seconds before next submission to help out SLURM system

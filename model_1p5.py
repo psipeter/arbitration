@@ -301,8 +301,6 @@ if __name__ == "__main__":
             params = json.load(f)[monkey][str(session)]
         params['ff'] = 0.2
         params['alpha_w'] = 2*params['alpha_w']  # try this to boost omega dynamics
-        print(params)
-        raise
     elif param_config=='random':
         rng_network = np.random.default_rng(seed=seed_network)
         params = {
