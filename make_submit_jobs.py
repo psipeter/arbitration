@@ -7,8 +7,8 @@ import time
 for monkey in ['V', 'W']:
 	for session in range(4):
 		for block in range(1,25):
-			fit_string = f"python model_1p5.py {monkey} {session} {block}"
-			file_string = f'job_nef_{monkey}_{session}_{block}.sh'
+			fit_string = f"job_python model_1p7.py {monkey} {session} {block}"
+			file_string = f'{monkey}_{session}_{block}.sh'
 			with open (file_string, 'w') as rsh:
 				rsh.write('''#!/bin/bash''')
 				rsh.write("\n")
@@ -25,6 +25,6 @@ for monkey in ['V', 'W']:
 for monkey in ['V', 'W']:
 	for session in range(4):
 		for block in range(1,25):
-			submit_string = ["sbatch", f"job_nef_{monkey}_{session}_{block}.sh"]
+			submit_string = ["sbatch", f"job_{monkey}_{session}_{block}.sh"]
 			a = subprocess.run(submit_string)
 			time.sleep(1)  # wait a few seconds before next submission to help out SLURM system
