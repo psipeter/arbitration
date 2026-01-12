@@ -310,9 +310,9 @@ def build_network(params):
 
         # computed errors drive PES learning
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let learning
-        nengo.Connection(evc, cf2.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc learning
+        # nengo.Connection(evc, cf2.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc learning
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let decay
-        nengo.Connection(evu, cf2.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc decay
+        # nengo.Connection(evu, cf2.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc decay
         nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-params['alpha_w'])  # omega learning
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-params['gamma_w'])  # omega decay
 
