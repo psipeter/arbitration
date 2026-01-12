@@ -18,16 +18,13 @@ def simulate(monkey, session, block, trials, config='fixed'):
         for trial in range(1, params['trials']+1):
             if trial==1 or trial%10==0: print(f"trial {trial}")
             reset_nodes(net, params, trial)
-            net.act.set(False)
             sim.run(params['t_iti'])
             set_nodes(net, params, trial)
             sim.run(params['t_cue'])
-            net.act.set(True)
-            sim.run(params['t_rew'])
             data = get_data(sim, net, params, trial)
             data_list.append(data)
     dataframe = pd.DataFrame(data_list)
-    return dataframe
+    return dataframe, sim, net
     # return sim, net
 
 def get_params(monkey, session, block, trials=80, config='fixed'):
@@ -38,15 +35,15 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'trials':trials,
         'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
-        't_iti':1.5,
-        't_cue':0.3,
-        't_rew':1.2,
+        't_iti':0.5,
+        't_cue':0.5,
         'p_rew':0.7,
         'w0':0.5,
-        'lr_let':8e-5,
-        'lr_loc':3e-5,
-        'lr_w':3e-5,
+        'lr_let':3e-5,
+        'lr_loc':1e-5,
+        'lr_w':2e-5,
         'ramp':0.3,
+        'thr': 0.3,
         'neurons':1000,
     }
     if config=='fixed':
@@ -73,10 +70,12 @@ def set_nodes(net, params, trial):
     net.mask_learn.set(trial)
     net.mask_decay.set(trial)
     net.rew.set(trial)
+    net.act.set(True)
 def reset_nodes(net, params, trial):
     net.cue.reset()
     net.mask_learn.reset()
     net.mask_decay.reset()
+    net.act.set(False)
 
 def get_data(sim, net, params, trial):
     data = {
@@ -93,7 +92,7 @@ def get_data(sim, net, params, trial):
         'ar':sim.data[net.p_a][-1,1],
         'w':sim.data[net.p_w][-1,0],
         'rew':sim.data[net.p_rew][-1,0],
-        'acc':sim.data[net.p_rew][-1,2],
+        'acc':sim.data[net.p_rew][-1,3],
     }
     return data
 
@@ -114,24 +113,41 @@ def build_network(params):
         def step(self, t):
             return self.state
 
+    class ThrNode(nengo.Node):
+        def __init__(self, params, size_in=0, size_out=1):
+            self.thr = params['thr']
+            self.t_cue = params['t_cue']
+            self.t_iti = params['t_iti']
+            self.state = np.zeros((size_out))
+            super().__init__(self.step, size_in=size_in, size_out=size_out, label='cue')
+        def step(self, t):
+            t_since_cue = t % (self.t_iti + self.t_cue) - self.t_iti
+            if t_since_cue < 0:
+                self.state[0] = self.thr
+            else:
+                self.state[0] = self.thr * (1 - 1.1*t_since_cue/self.t_cue)
+            return self.state
+
     class ActionNode(nengo.Node):
-        def __init__(self, params, size_in=2, size_out=1):
-            self.choose = False
+        def __init__(self, params, size_in=3, size_out=1):
+            self.go = False
+            self.thr = params['thr']
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='action')
-        def set(self, choose):
-            self.choose = choose
+        def set(self, go):
+            self.go = go  # decision period has started
             self.state = np.zeros((self.size_out))
         def step(self, t, x):
             aL, aR = x[0], x[1]
-            if self.choose and self.state[0]==0:  # make a new choice once
+            thr = x[2]
+            if self.go and np.abs(aL-aR) > thr and self.state[0]==0 :  # make a new choice once
                 if aL>aR: self.state[0] = 1
                 elif aR>aL: self.state[0] = -1
                 else: self.state[0] = 0
             return self.state
 
     class RewardNode(nengo.Node):
-        def __init__(self, params, size_in=1, size_out=3):
+        def __init__(self, params, size_in=1, size_out=4):
             monkey, session, block = params['monkey'], params['session'], params['block']
             self.p_rew = params['p_rew']
             self.rng = np.random.default_rng(seed=params['seed_rew'])
@@ -148,25 +164,30 @@ def build_network(params):
             if action==0:
                 self.state[0] = 0  # rewarded = 1, punished = -1
                 self.state[1] = 1  # cue/decision phase = 1, reward pahse = 0
-                self.state[2] = 0  # make correct decision = 1, incorrect = -1
+                self.state[2] = 0  # cue/decision phase = 0, reward pahse = 1
+                self.state[3] = 0  # make correct decision = 1, incorrect = -1
             else:
                 cor_loc = 1 if self.cor_loc=='left' else -1
                 if action==cor_loc and self.deliver:
                     self.state[0] = 1  # yes rewarded for picking the better option
-                    self.state[1] = 0  # begin feedback phase
-                    self.state[2] = 1  # chose correctly
+                    self.state[1] = 0  # remove inhibition on error populations
+                    self.state[2] = 1  # begin inhibition that resets the action integrator
+                    self.state[3] = 1  # chose correctly
                 if action==cor_loc and not self.deliver:
                     self.state[0] = -1  # not rewarded for picking the better option
-                    self.state[1] = 0  # begin feedback phase
-                    self.state[2] = 1  # chose correctly
+                    self.state[1] = 0  # remove inhibition on error populations
+                    self.state[2] = 1  # begin inhibition that resets the action integrator
+                    self.state[3] = 1  # chose correctly
                 if action!=cor_loc and not self.deliver:
                     self.state[0] = 1  # yes rewarded for picking the worse option
-                    self.state[1] = 0  # begin feedback phase
-                    self.state[2] = -1  # chose incorrectly
+                    self.state[1] = 0  # remove inhibition on error populations
+                    self.state[2] = 1  # begin inhibition that resets the action integrator
+                    self.state[3] = -1  # chose incorrectly
                 if action!=cor_loc and self.deliver:
                     self.state[0] = -1  # not rewarded for picking the worse option
-                    self.state[1] = 0  # begin feedback phase
-                    self.state[2] = -1  # chose incorrectly
+                    self.state[1] = 0  # remove inhibition on error populations
+                    self.state[2] = 1  # begin inhibition that resets the action integrator
+                    self.state[3] = -1  # chose incorrectly
             return self.state
 
     class MaskLearningNode(nengo.Node):
@@ -225,16 +246,17 @@ def build_network(params):
         mask_learn = MaskLearningNode(params)  # mask signal used to update the chosen values and locations: [mA, mB, mL, mR]
         mask_decay = MaskDecayNode(params)  # mask signal used to update the unchosen values and locations: [mA, mB, mL, mR] = 1 - mask_learn
         act = ActionNode(params)  # decides whether action values cross action threshold
+        athr = ThrNode(params)  # inputs the dynamic action threshold, which linearly decreases from thr to 0 during t_cue
         
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 4)  # value features
         g = nengo.Ensemble(params['neurons'], 1)  # omega features
-        v = nengo.Ensemble(params['neurons'], 4, radius=2)  # learned values: [vA, vB, vL, vR]
+        v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
-        a = nengo.Ensemble(params['neurons'], 2, radius=2)  # accumulated action values [aL, aR]
-        afb = nengo.Ensemble(params['neurons'], 3, radius=2)  # controlled integrator: fb=1 causes accumulation, fb=0 causes decay [aL, aR, fb]
-        vlet = nengo.Ensemble(params['neurons'], 4, radius=2)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
-        vwa = nengo.Ensemble(params['neurons'], 5, radius=3)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
+        a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
+        afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
+        vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
+        vwa = nengo.Ensemble(params['neurons'], 5, radius=1.5)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         evu = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for unchosn option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         drel = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined value vector for chosen option and mask, for updaing omega: [vA, vB, vL, vR, mA, mB, mL, mR]
@@ -263,10 +285,11 @@ def build_network(params):
         nengo.Connection(vwa, a[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
 
         # recurrent connect the action population so that it ramps at a rate proportional to the weighted values
-        nengo.Connection(a, afb[:2], synapse=0.1)  # action integrator
-        nengo.Connection(afb, a, synapse=0.1, function=lambda x: [x[0]*x[2], x[1]*x[2]])  # integrate before action, decay after action: x[2] controls
-        nengo.Connection(rew[1], afb[2], synapse=None)  # control feedback based on phase
-        nengo.Connection(a, act, synapse=0.01)  # send action values to action node
+        nengo.Connection(a, afb, synapse=0.1)  # action integrator
+        nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
+        nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
+        nengo.Connection(a, act[:2], synapse=0.01)  # send action values to action node
+        nengo.Connection(athr, act[2], synapse=None)  # send dynamic threshold to action node
         nengo.Connection(act, rew, synapse=None)  # send [+/-1] to reward node
         nengo.Connection(act, mask_learn, synapse=None)  # send [+/-1] to learning mask node
         nengo.Connection(act, mask_decay, synapse=None)  # send [+/-1] to decay mask node
@@ -303,12 +326,17 @@ def build_network(params):
         net.p_v = nengo.Probe(v, synapse=0.01)
         net.p_w = nengo.Probe(w, synapse=0.01)
         net.p_a = nengo.Probe(a, synapse=0.01)
+        net.p_afb = nengo.Probe(afb, synapse=0.01)
         net.p_act = nengo.Probe(act)
         vletout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
         nengo.Connection(vlet, vletout[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])
         nengo.Connection(vlet, vletout[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])
         net.p_vlet = nengo.Probe(vletout)
-        net.p_vwa = nengo.Probe(vwa, synapse=0.01)
+        vwaout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
+        nengo.Connection(vwa, vwaout[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
+        nengo.Connection(vwa, vwaout[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
+        # net.p_vwa = nengo.Probe(vwa, synapse=0.01)
+        net.p_vwa = nengo.Probe(vwaout, synapse=0.01)
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
         net.p_ewt = nengo.Probe(ewt)
@@ -335,7 +363,7 @@ if __name__ == "__main__":
     block = int(sys.argv[3])
     config = 'random'
     s = time.time()
-    nef_data = simulate(monkey, session, block, trials=80, config='random')
+    nef_data, sim, net = simulate(monkey, session, block, trials=80, config='random')
     nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
