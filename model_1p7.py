@@ -31,7 +31,6 @@ def simulate(monkey, session, block, trials, config='fixed'):
     # return sim, net
 
 def get_params(monkey, session, block, trials=80, config='fixed'):
-
     params = {
         'monkey':monkey,
         'session':session,
@@ -39,18 +38,17 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'trials':trials,
         'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
-        't_iti':0.5,
-        't_cue':0.5,
-        't_rew':1.0,
+        't_iti':1.5,
+        't_cue':0.3,
+        't_rew':1.2,
         'p_rew':0.7,
         'w0':0.5,
-        'lr_let':4e-5,
-        'lr_loc':2e-5,
+        'lr_let':8e-5,
+        'lr_loc':3e-5,
         'lr_w':3e-5,
-        'ramp':0.2,
+        'ramp':0.3,
         'neurons':1000,
     }
-
     if config=='fixed':
         params_net = {
             'alpha_v':0.5,
@@ -68,7 +66,6 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
             'gamma_w':rng_net.uniform(0.05, 0.10),
         }
     params = params | params_net  # combine two parameter dictionaries
-
     return params
 
 def set_nodes(net, params, trial):
@@ -105,7 +102,7 @@ def build_network(params):
     class CueNode(nengo.Node):
         def __init__(self, params, size_in=0, size_out=2):
             monkey, session, block = params['monkey'], params['session'], params['block']
-            self.emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey & session==@session & block==@block")
+            self.emp = pd.read_pickle("data/empirical2.pkl").query("monkey==@monkey & session==@session & block==@block")
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='cue')
         def set(self, trial):
@@ -138,13 +135,13 @@ def build_network(params):
             monkey, session, block = params['monkey'], params['session'], params['block']
             self.p_rew = params['p_rew']
             self.rng = np.random.default_rng(seed=params['seed_rew'])
-            self.emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey & session==@session & block==@block")
-            self.correct = None
+            self.emp = pd.read_pickle("data/empirical2.pkl").query("monkey==@monkey & session==@session & block==@block")
+            self.cor_loc = None
             self.deliver = None
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='reward')
         def set(self, trial):
-            self.correct = self.emp.query("trial==@trial")['correct'].values[0]
+            self.cor_loc = self.emp.query("trial==@trial")['cor_loc'].values[0]
             self.deliver = self.rng.uniform(0,1) <= self.p_rew
         def step(self, t, x):
             action = x[0]
@@ -153,20 +150,20 @@ def build_network(params):
                 self.state[1] = 1  # cue/decision phase = 1, reward pahse = 0
                 self.state[2] = 0  # make correct decision = 1, incorrect = -1
             else:
-                correct = 1 if self.correct=='left' else -1
-                if action==correct and self.deliver:
+                cor_loc = 1 if self.cor_loc=='left' else -1
+                if action==cor_loc and self.deliver:
                     self.state[0] = 1  # yes rewarded for picking the better option
                     self.state[1] = 0  # begin feedback phase
                     self.state[2] = 1  # chose correctly
-                if action==correct and not self.deliver:
+                if action==cor_loc and not self.deliver:
                     self.state[0] = -1  # not rewarded for picking the better option
                     self.state[1] = 0  # begin feedback phase
                     self.state[2] = 1  # chose correctly
-                if action!=correct and not self.deliver:
+                if action!=cor_loc and not self.deliver:
                     self.state[0] = 1  # yes rewarded for picking the worse option
                     self.state[1] = 0  # begin feedback phase
                     self.state[2] = -1  # chose incorrectly
-                if action!=correct and self.deliver:
+                if action!=cor_loc and self.deliver:
                     self.state[0] = -1  # not rewarded for picking the worse option
                     self.state[1] = 0  # begin feedback phase
                     self.state[2] = -1  # chose incorrectly
@@ -175,7 +172,7 @@ def build_network(params):
     class MaskLearningNode(nengo.Node):
         def __init__(self, params, size_in=1, size_out=4):
             monkey, session, block = params['monkey'], params['session'], params['block']
-            self.emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey & session==@session & block==@block")
+            self.emp = pd.read_pickle("data/empirical2.pkl").query("monkey==@monkey & session==@session & block==@block")
             self.letter_left, self.letter_right = None, None
             self.left_letter, self.right_letter = None, None
             self.state = np.zeros((size_out))
@@ -198,7 +195,7 @@ def build_network(params):
     class MaskDecayNode(nengo.Node):
         def __init__(self, params, size_in=1, size_out=4):
             monkey, session, block = params['monkey'], params['session'], params['block']
-            self.emp = pd.read_pickle("data/empirical.pkl").query("monkey==@monkey & session==@session & block==@block")
+            self.emp = pd.read_pickle("data/empirical2.pkl").query("monkey==@monkey & session==@session & block==@block")
             self.left_letter, self.right_letter = None, None
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='mask_decay')
