@@ -39,7 +39,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         't_cue':1.5,
         'p_rew':0.7,
         'w0':0.5,
-        'lr_let':6e-5,
+        'lr_let':2e-5,
         'lr_loc':2e-5,
         'lr_w':2e-5,
         'ramp':0.3,
@@ -336,7 +336,8 @@ def build_network(params):
         nengo.Connection(vwa, vwaout[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
         nengo.Connection(vwa, vwaout[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
         # net.p_vwa = nengo.Probe(vwa, synapse=0.01)
-        net.p_vwa = nengo.Probe(vwaout, synapse=0.01)
+        net.p_vwa = nengo.Probe(vwa, synapse=0.1)
+        net.p_vwaout = nengo.Probe(vwaout)
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
         net.p_ewt = nengo.Probe(ewt)
