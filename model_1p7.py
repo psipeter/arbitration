@@ -43,7 +43,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'lr_loc':2e-5,
         'lr_w':2e-5,
         'ramp':0.3,
-        'thr': 0.1,
+        'thr': 1.0,
         'neurons':1000,
     }
     if config=='fixed':
