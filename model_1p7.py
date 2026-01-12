@@ -310,9 +310,9 @@ def build_network(params):
 
         # computed errors drive PES learning
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let learning
-        # nengo.Connection(evc, cf2.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc learning
+        nengo.Connection(evc, cf2.learning_rule, synapse=0.01, transform=params['alpha_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc learning
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[0]*x[4], x[1]*x[5]])  # let decay
-        # nengo.Connection(evu, cf2.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc decay
+        nengo.Connection(evu, cf2.learning_rule, synapse=0.01, transform=-params['gamma_v'], function=lambda x: [x[2]*x[6], x[3]*x[7]])  # loc decay
         nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-params['alpha_w'])  # omega learning
         nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-params['gamma_w'])  # omega decay
 
@@ -335,8 +335,7 @@ def build_network(params):
         vwaout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
         nengo.Connection(vwa, vwaout[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
         nengo.Connection(vwa, vwaout[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
-        # net.p_vwa = nengo.Probe(vwa, synapse=0.01)
-        net.p_vwa = nengo.Probe(vwa, synapse=0.1)
+        net.p_vwa = nengo.Probe(vwa, synapse=0.01)
         net.p_vwaout = nengo.Probe(vwaout)
         net.p_evc = nengo.Probe(evc)
         net.p_evu = nengo.Probe(evu)
