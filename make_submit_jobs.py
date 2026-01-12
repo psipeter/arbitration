@@ -12,13 +12,13 @@ for monkey in ['V', 'W']:
 			with open (file_string, 'w') as rsh:
 				rsh.write('''#!/bin/bash''')
 				rsh.write("\n")
-				rsh.write('''#SBATCH --mem=32G''')
+				rsh.write('''#SBATCH --mem=16G''')
 				rsh.write("\n")
 				rsh.write('''#SBATCH --nodes=1''')
 				rsh.write("\n")
 				rsh.write('''#SBATCH --ntasks-per-node=1''')
 				rsh.write("\n")
-				rsh.write('''#SBATCH --time=0:30:0''')
+				rsh.write('''#SBATCH --time=0:10:0''')
 				rsh.write("\n")
 				rsh.write(fit_string)
 
