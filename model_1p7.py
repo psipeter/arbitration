@@ -40,9 +40,9 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':4e-5,
-        'lr_w':4e-5,
-        'ramp':0.3,
+        'lr_v':5e-5,
+        'lr_w':5e-5,
+        'ramp':1.0,
         'thr': 1.0,
         'neurons':1000,
     }
@@ -342,8 +342,8 @@ def build_network(params):
         nengo.Connection(w, vwa[4], synapse=0.01)  # [w]
 
         # compute the overall action values using the arbitration weight
-        nengo.Connection(vwa, a[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
-        nengo.Connection(vwa, a[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
+        nengo.Connection(vwa, a[0], synapse=0.1, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
+        nengo.Connection(vwa, a[1], synapse=0.1, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
 
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
         # nengo.Connection(a, afb, synapse=0.1)  # action integrator
