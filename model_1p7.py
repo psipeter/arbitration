@@ -35,7 +35,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'trials':trials,
         'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
-        't_iti':0.01,
+        't_iti':0.5,
         't_cue':1.5,
         'p_rew':0.7,
         'w0':0.5,
@@ -43,7 +43,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         # 'lr_loc':0e-5,
         'lr_v':3e-5,
         'lr_w':3e-5,
-        'ramp':0.3,
+        'ramp':0.2,
         'thr': 0.5,
         'neurons':1000,
     }
