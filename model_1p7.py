@@ -41,9 +41,9 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'w0':0.5,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':3e-5,
+        'lr_v':5e-5,
         'lr_w':3e-5,
-        'ramp':0.2,
+        'ramp':0.4,
         'thr': 0.5,
         'neurons':1000,
     }
@@ -275,7 +275,7 @@ def build_network(params):
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 4)  # value features
         g = nengo.Ensemble(params['neurons'], 1)  # omega features
-        v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
+        v = nengo.Ensemble(params['neurons'], 4, radius=2)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
         afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
