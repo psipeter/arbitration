@@ -40,8 +40,8 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':4e-6,
-        'lr_w':4e-6,
+        'lr_v':1e-5,
+        'lr_w':2e-5,
         'ramp':1.0,
         'thr': 1.0,
         'neurons':1000,
@@ -317,7 +317,7 @@ def build_network(params):
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         # evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         # evu = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for unchosn option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
-        drel = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined value vector for chosen option and mask, for updaing omega: [vA, vB, vL, vR, mA, mB, mL, mR]
+        # drel = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined value vector for chosen option and mask, for updaing omega: [vA, vB, vL, vR, mA, mB, mL, mR]
         wtar = nengo.Ensemble(params['neurons'], 1)  # target omega value following action and reward  [wtar]
         # ewt = nengo.Ensemble(params['neurons'], 1)  # error for omega update  [ew]
         # ewd = nengo.Ensemble(params['neurons'], 1)  # error for omega decay  [ew]
@@ -415,7 +415,7 @@ def build_network(params):
         net.p_evu = nengo.Probe(evu)
         net.p_ewt = nengo.Probe(ewt)
         # net.p_ewd = nengo.Probe(ewd)
-        net.p_drel = nengo.Probe(drel)
+        # net.p_drel = nengo.Probe(drel)
         net.p_cue = nengo.Probe(cue)
         net.p_rew = nengo.Probe(rew)
         net.p_mask_learn = nengo.Probe(mask_learn)
