@@ -37,15 +37,15 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
         't_iti':0.5,
         't_cue':1.5,
-        'p_rew':0.7,
+        'p_rew':1.0,
         'w0':0.5,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':5e-5,
+        'lr_v':1e-5,
         'lr_w':3e-5,
-        'ramp':0.4,
-        'thr': 0.5,
-        'neurons':3000,
+        'ramp':0.2,
+        'thr': 1.0,
+        'neurons':1000,
     }
     if config=='fixed':
         params_net = {
@@ -258,6 +258,20 @@ def build_network(params):
             return self.state
             # [vA, vB, vL, vR]: 1 if decay should occur because letter/loc was NOT chosen, 0 otherwise
 
+    class ApplyMaskNode(nengo.Node):
+        def __init__(self, params, size_in=89, size_out=4):
+            self.state = np.zeros((size_out))
+            super().__init__(self.step, size_in=size_in, size_out=size_out, label='mask_decay')
+        def step(self, t, x):
+            errors = x[:4]  # error in [vA, vB, vL, vR]
+            masks = x[4:8]  # mask for error in [vA, vB, vL, vR]
+            stop = x[8]  # turn learning off during iti/cue phase
+            if stop:
+                self.state = np.zeros((self.size_out))
+            else:
+                self.state = masks * errors
+            return self.state
+
     net = nengo.Network(seed=params['seed_net'])
     with net:
         # INPUTS
@@ -311,7 +325,7 @@ def build_network(params):
         nengo.Connection(vwa, a[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
         nengo.Connection(vwa, a[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
 
-        # recurrent connect the action population so that it ramps at a rate proportional to the weighted values
+        # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
         nengo.Connection(a, afb, synapse=0.1)  # action integrator
         nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
         nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
