@@ -40,10 +40,10 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':3e-5,
-        'lr_w':3e-5,
-        'ramp':1.0,
-        'thr': 0.3,
+        'lr_v':4e-5,
+        'lr_w':4e-5,
+        'ramp':0.1,
+        'thr': 1.0,
         'neurons':1000,
     }
     if config=='fixed':
@@ -312,7 +312,7 @@ def build_network(params):
         v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
-        afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
+        # afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
         # vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         # evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
@@ -402,7 +402,7 @@ def build_network(params):
         net.p_v = nengo.Probe(v, synapse=0.01)
         net.p_w = nengo.Probe(w, synapse=0.01)
         net.p_a = nengo.Probe(a, synapse=0.01)
-        net.p_afb = nengo.Probe(afb, synapse=0.01)
+        # net.p_afb = nengo.Probe(afb, synapse=0.01)
         net.p_act = nengo.Probe(act[0])
         net.p_tdec = nengo.Probe(act[1], synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
