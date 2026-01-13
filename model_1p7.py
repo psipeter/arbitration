@@ -45,7 +45,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'lr_w':3e-5,
         'ramp':0.4,
         'thr': 0.5,
-        'neurons':1000,
+        'neurons':3000,
     }
     if config=='fixed':
         params_net = {
@@ -275,12 +275,12 @@ def build_network(params):
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 4)  # value features
         g = nengo.Ensemble(params['neurons'], 1)  # omega features
-        v = nengo.Ensemble(params['neurons'], 4, radius=2)  # learned values: [vA, vB, vL, vR]
+        v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
         afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
         # vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
-        vwa = nengo.Ensemble(params['neurons'], 5, radius=1.5)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
+        vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         evu = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for unchosn option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         drel = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined value vector for chosen option and mask, for updaing omega: [vA, vB, vL, vR, mA, mB, mL, mR]
