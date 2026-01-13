@@ -38,12 +38,11 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         't_iti':0.5,
         't_cue':1.5,
         'p_rew':1.0,
-        'w0':0.5,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':1e-5,
-        'lr_w':3e-5,
-        'ramp':0.2,
+        'lr_v':5e-5,
+        'lr_w':5e-5,
+        'ramp':0.3,
         'thr': 1.0,
         'neurons':1000,
     }
@@ -59,8 +58,8 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.9, 1.0),
-            'w0':rng_net.uniform(0.4, 0.6),
-            'alpha_w':rng_net.uniform(0.3, 0.5),
+            'w0':rng_net.uniform(0.49, 0.51),
+            'alpha_w':rng_net.uniform(0.4, 0.6),
             'gamma_w':rng_net.uniform(0.05, 0.10),
         }
     params = params | params_net  # combine two parameter dictionaries
