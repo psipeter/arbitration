@@ -43,8 +43,8 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'lr_loc':3e-5,
         'lr_w':3e-5,
         'ramp':0.3,
-        'thr': 1.0,
-        'neurons':3000,
+        'thr': 0.5,
+        'neurons':1000,
     }
     if config=='fixed':
         params_net = {
@@ -91,6 +91,7 @@ def get_data(sim, net, params, trial):
         'al':sim.data[net.p_a][-1,0],
         'ar':sim.data[net.p_a][-1,1],
         'w':sim.data[net.p_w][-1,0],
+        'act':sim.data[net.p_act][-1,0],
         'rew':sim.data[net.p_rew][-1,0],
         'acc':sim.data[net.p_rew][-1,3],
         'tdec':sim.data[net.p_tdec][-1,0],
