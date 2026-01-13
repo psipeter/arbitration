@@ -102,18 +102,33 @@ def get_data(sim, net, params, trial):
 def build_network(params):
                 
     class CueNode(nengo.Node):
-        def __init__(self, params, size_in=0, size_out=2):
+        def __init__(self, params, size_in=0, size_out=1):
             monkey, session, block = params['monkey'], params['session'], params['block']
             self.emp = pd.read_pickle("data/empirical2.pkl").query("monkey==@monkey & session==@session & block==@block")
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='cue')
         def set(self, trial):
-            # [1,0] if [A,B]  or  [0,1] if [B,A], serves as a mask for value routing in the network
-            self.state[0] = 1 if self.emp.query("trial==@trial")['left'].values[0]=='A' else 0
-            self.state[1] = 1 if self.emp.query("trial==@trial")['right'].values[0]=='A' else 0
+            self.state[0] = 1 if self.emp.query("trial==@trial")['left'].values[0]=='A' else -1
         def reset(self):
             self.state = np.zeros((self.size_out))
         def step(self, t):
+            return self.state
+
+    class VLetNode(nengo.Node):
+        def __init__(self, size_in=4, size_out=2):
+            self.state = np.zeros((size_out))
+            super().__init__(self.step, size_in=size_in, size_out=size_out, label='action')
+        def step(self, t, x):
+            vA, vB = x[0], x[1]  # learned values
+            cue = x[2]  # 1 if A is on L, -1 if A is on R
+            if cue==1:
+                self.state[0] = vA
+                self.state[1] = vB
+            elif cue==-1:
+                self.state[0] = vB
+                self.state[1] = vA
+            else:
+                self.state = np.zeros((self.size_out))
             return self.state
 
     class ThrNode(nengo.Node):
@@ -249,7 +264,8 @@ def build_network(params):
         in_f = nengo.Node([0,0,0,0])  # constant vector that provides features for learning values
         in_g = nengo.Node([0])  # constant vector that provides features for learning omega
         in_w = nengo.Node(params['w0'])  # baseline omega
-        cue = CueNode(params)  # input trial-specific [Letter L, Letter R]
+        cue = CueNode(params)  # input trial-specific [+/- 1] if A on L/R
+        vlet = VLetNode()  # takes vA, vB as input, outputs vLetL, vLetR
         rew = RewardNode(params)  # if action has been chosen, return trial-specific reward +/-1, and a generic reward signal: [signed_rew, abs_rew]
         mask_learn = MaskLearningNode(params)  # mask signal used to update the chosen values and locations: [mA, mB, mL, mR]
         mask_decay = MaskDecayNode(params)  # mask signal used to update the unchosen values and locations: [mA, mB, mL, mR] = 1 - mask_learn
@@ -263,7 +279,7 @@ def build_network(params):
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
         afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
-        vlet = nengo.Ensemble(params['neurons'], 4, radius=2)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
+        # vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
         vwa = nengo.Ensemble(params['neurons'], 5, radius=1.5)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         evu = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for unchosn option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
@@ -283,9 +299,11 @@ def build_network(params):
 
         # combine all values and omega into one population
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)  # [vA, vB]
-        nengo.Connection(cue, vlet[2:4])  # [1,0] if [A,B] or [0,1] if [B,A], serves as a mask for value routing in the network
-        nengo.Connection(vlet, vwa[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])  # computes vLetL using above mask
-        nengo.Connection(vlet, vwa[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])  # computes vLetR using above mask
+        nengo.Connection(cue, vlet[2], synapse=None)  # [+/-1] if A on L/R
+        nengo.Connection(vlet, vwa[:2], synapse=None)  # [vLetL, vLetR]
+        # nengo.Connection(cue, vlet[2:4])  # [1,0] if [A,B] or [0,1] if [B,A], serves as a mask for value routing in the network
+        # nengo.Connection(vlet, vwa[0], synapse=0.02, function=lambda x: x[0]*x[2]+x[1]*x[3])  # computes vLetL using above mask
+        # nengo.Connection(vlet, vwa[1], synapse=0.02, function=lambda x: x[1]*x[2]+x[0]*x[3])  # computes vLetR using above mask
         nengo.Connection(v[2:4], vwa[2:4], synapse=0.01)  # [vL, vL]
         nengo.Connection(w, vwa[4], synapse=0.01)  # [w]
 
@@ -340,10 +358,7 @@ def build_network(params):
         net.p_afb = nengo.Probe(afb, synapse=0.01)
         net.p_act = nengo.Probe(act[0])
         net.p_tdec = nengo.Probe(act[1], synapse=None)
-        vletout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
-        nengo.Connection(vlet, vletout[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])
-        nengo.Connection(vlet, vletout[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])
-        net.p_vlet = nengo.Probe(vletout)
+        net.p_vlet = nengo.Probe(vlet, synapse=None)
         vwaout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
         nengo.Connection(vwa, vwaout[0], synapse=0.01, transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
         nengo.Connection(vwa, vwaout[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
