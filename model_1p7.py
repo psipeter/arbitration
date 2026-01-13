@@ -346,10 +346,10 @@ def build_network(params):
         nengo.Connection(vwa, a[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
 
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
-        nengo.Connection(a, afb, synapse=0.1)  # action integrator
-        nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
-        nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
-        nengo.Connection(a, act[:2], synapse=0.01)  # send action values to action node
+        # nengo.Connection(a, afb, synapse=0.1)  # action integrator
+        # nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
+        # nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
+        nengo.Connection(a, act[:2], synapse=0.1)  # send action values to action node
         nengo.Connection(athr, act[2], synapse=None)  # send dynamic threshold to action node
         nengo.Connection(act[0], rew, synapse=None)  # send [+/-1] to reward node
         nengo.Connection(act[0], mask_learn, synapse=None)  # send [+/-1] to learning mask node
