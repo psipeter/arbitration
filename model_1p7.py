@@ -40,9 +40,9 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':2e-5,
-        'lr_w':5e-5,
-        'ramp':1.0,
+        'lr_v':1e-5,
+        'lr_w':3e-5,
+        'ramp':0.1,
         'thr': 1.0,
         'neurons':1000,
     }
@@ -312,7 +312,7 @@ def build_network(params):
         v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
-        # afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
+        afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
         # vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         # evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
@@ -346,9 +346,9 @@ def build_network(params):
         nengo.Connection(vwa, a[1], synapse=0.01, transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
 
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
-        # nengo.Connection(a, afb, synapse=0.1)  # action integrator
-        # nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
-        # nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
+        nengo.Connection(a, afb, synapse=0.01)  # action integrator
+        nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
+        nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
         nengo.Connection(a, act[:2], synapse=0.01)  # send action values to action node
         nengo.Connection(athr, act[2], synapse=None)  # send dynamic threshold to action node
         nengo.Connection(act[0], rew, synapse=None)  # send [+/-1] to reward node
@@ -402,7 +402,7 @@ def build_network(params):
         net.p_v = nengo.Probe(v, synapse=0.01)
         net.p_w = nengo.Probe(w, synapse=0.01)
         net.p_a = nengo.Probe(a, synapse=0.01)
-        # net.p_afb = nengo.Probe(afb, synapse=0.01)
+        net.p_afb = nengo.Probe(afb, synapse=0.01)
         net.p_act = nengo.Probe(act[0])
         net.p_tdec = nengo.Probe(act[1], synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
