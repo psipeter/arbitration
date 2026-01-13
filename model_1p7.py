@@ -40,7 +40,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         'w0':0.5,
         'lr_let':3e-5,
-        'lr_loc':3e-5,
+        'lr_loc':0e-5,
         'lr_w':3e-5,
         'ramp':0.3,
         'thr': 0.5,
