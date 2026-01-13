@@ -37,7 +37,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
         't_iti':0.5,
         't_cue':1.5,
-        'p_rew':1.0,
+        'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
         'lr_v':4e-5,
