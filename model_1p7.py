@@ -35,16 +35,16 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'trials':trials,
         'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
-        't_iti':0.1,
+        't_iti':0.01,
         't_cue':1.5,
         'p_rew':0.7,
         'w0':0.5,
-        'lr_let':2e-5,
-        'lr_loc':2e-5,
-        'lr_w':2e-5,
+        'lr_let':3e-5,
+        'lr_loc':3e-5,
+        'lr_w':3e-5,
         'ramp':0.3,
         'thr': 1.0,
-        'neurons':1000,
+        'neurons':3000,
     }
     if config=='fixed':
         params_net = {
@@ -93,6 +93,7 @@ def get_data(sim, net, params, trial):
         'w':sim.data[net.p_w][-1,0],
         'rew':sim.data[net.p_rew][-1,0],
         'acc':sim.data[net.p_rew][-1,3],
+        'tdec':sim.data[net.p_tdec][-1,0],
     }
     return data
 
@@ -129,10 +130,13 @@ def build_network(params):
             return self.state
 
     class ActionNode(nengo.Node):
-        def __init__(self, params, size_in=3, size_out=1):
+        def __init__(self, params, size_in=3, size_out=2):
             self.go = False
             self.thr = params['thr']
+            self.t_cue = params['t_cue']
+            self.t_iti = params['t_iti']
             self.state = np.zeros((size_out))
+            self.t_dec = None
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='action')
         def set(self, go):
             self.go = go  # decision period has started
@@ -141,9 +145,11 @@ def build_network(params):
             aL, aR = x[0], x[1]
             thr = x[2]
             if self.go and np.abs(aL-aR) > thr and self.state[0]==0 :  # make a new choice once
+                t_dec = t % (self.t_iti + self.t_cue) - self.t_iti
                 if aL>aR: self.state[0] = 1
                 elif aR>aL: self.state[0] = -1
                 else: self.state[0] = 0
+                self.state[1] = t_dec  # decision (reaction) time
             return self.state
 
     class RewardNode(nengo.Node):
@@ -290,9 +296,9 @@ def build_network(params):
         nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
         nengo.Connection(a, act[:2], synapse=0.01)  # send action values to action node
         nengo.Connection(athr, act[2], synapse=None)  # send dynamic threshold to action node
-        nengo.Connection(act, rew, synapse=None)  # send [+/-1] to reward node
-        nengo.Connection(act, mask_learn, synapse=None)  # send [+/-1] to learning mask node
-        nengo.Connection(act, mask_decay, synapse=None)  # send [+/-1] to decay mask node
+        nengo.Connection(act[0], rew, synapse=None)  # send [+/-1] to reward node
+        nengo.Connection(act[0], mask_learn, synapse=None)  # send [+/-1] to learning mask node
+        nengo.Connection(act[0], mask_decay, synapse=None)  # send [+/-1] to decay mask node
 
         # compute error following choice and reward
         nengo.Connection(v, evc[:4], synapse=0.01)  # [vA, vB, vL, vR]
@@ -327,7 +333,8 @@ def build_network(params):
         net.p_w = nengo.Probe(w, synapse=0.01)
         net.p_a = nengo.Probe(a, synapse=0.01)
         net.p_afb = nengo.Probe(afb, synapse=0.01)
-        net.p_act = nengo.Probe(act)
+        net.p_act = nengo.Probe(act[0])
+        net.p_tdec = nengo.Probe(act[1], synapse=None)
         vletout = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout of vLetL and vLetR
         nengo.Connection(vlet, vletout[0], synapse=0.01, function=lambda x: x[0]*x[2]+x[1]*x[3])
         nengo.Connection(vlet, vletout[1], synapse=0.01, function=lambda x: x[1]*x[2]+x[0]*x[3])
