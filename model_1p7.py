@@ -9,8 +9,8 @@ import pickle
 import h5py
 import hashlib
 
-def simulate(monkey, session, block, trials, config='fixed'):
-    params = get_params(monkey, session, block, trials, config)
+def simulate(seed, monkey, session, block, trials, config='fixed'):
+    params = get_params(seed, monkey, session, block, trials, config)
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
@@ -29,20 +29,23 @@ def simulate(monkey, session, block, trials, config='fixed'):
     return dataframe, dataframe_full, sim, net
     # return sim, net
 
-def get_params(monkey, session, block, trials=80, config='fixed'):
+def get_params(seed, monkey, session, block, trials=80, config='fixed'):
     params = {
         'monkey':monkey,
         'session':session,
         'block':block,
         'trials':trials,
-        'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
-        'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
+        'seed':seed,
+        'seed_net':seed,
+        'seed_rew':seed,
+        # 'seed_net':int(hashlib.md5(f"{N}_{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
+        # 'seed_rew':int(hashlib.md5(f"{N}_{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
         't_iti':1.5,
         't_cue':1.5,
         'p_rew':0.7,
-        'lr_v':1.5e-5,
+        'lr_v':1e-5,
         'lr_w':5e-5,
-        'ramp':0.4,
+        'ramp':0.2,
         'thr':1.0,
         'w0':0.5,
         'neurons':1000,
@@ -57,7 +60,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         rng_net = np.random.default_rng(seed=params['seed_net'])
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
-            'gamma_v':rng_net.uniform(0.9, 1.0),
+            'gamma_v':rng_net.uniform(0.8, 1.0),
             'alpha_w':rng_net.uniform(0.5, 0.7),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
@@ -78,6 +81,7 @@ def reset_nodes(net, params, trial):
 
 def get_data(sim, net, params, trial):
     data = {
+        'seed':params['seed'],
         'monkey':params['monkey'],
         'session':params['session'],
         'block':params['block'],
@@ -421,10 +425,11 @@ if __name__ == "__main__":
     monkey = sys.argv[1]
     session = int(sys.argv[2])
     block = int(sys.argv[3])
+    seed = int(sys.argv[4])
     config = 'random'
     s = time.time()
-    nef_data, nef_data_full, sim, net = simulate(monkey, session, block, trials=80, config='random')
-    nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}.pkl")
+    nef_data, nef_data_full, sim, net = simulate(seed, monkey, session, block, trials=80, config='random')
+    nef_data.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}.pkl")
     # nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_full.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
