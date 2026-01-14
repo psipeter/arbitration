@@ -271,32 +271,42 @@ def build_network(params):
                 self.state = masks * errors
             return self.state
 
-    class WNode(nengo.Node):
-        def __init__(self, params, size_in=10, size_out=1):
-            self.w0 = params['w0']
+    class VChoNode(nengo.Node):
+        def __init__(self, size_in=8, size_out=2):
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='mask_decay')
         def step(self, t, x):
             vA, vB, vL, vR = x[0], x[1], x[2], x[3]
             mA, mB, mL, mR = x[4], x[5], x[6], x[7]  # indicates the chosen variables
-            stop = x[8]  # turn learning off during iti/cue phase
-            w = x[9]  # current decoded omega
-            if stop==1:
-                self.state = np.zeros((self.size_out))
-            else:
-                drel = (mA*vA+mB*vB) - (mL*vL+mR*vR)  # dQ_chosen_stim - dQ_chosen_choice
-                wtar = int(drel>0)  # 1/0
-                self.state[0] = np.abs(drel) * (wtar - w) 
-            return self.state
+            self.state[0] = mA*vA + mB*vB  # Q chosen for let
+            self.state[1] = mL*vL + mR*vR  # Q chosen for loc
+            return self.state    
+
+    # class WNode(nengo.Node):
+    #     def __init__(self, params, size_in=10, size_out=1):
+    #         self.state = np.zeros((size_out))
+    #         super().__init__(self.step, size_in=size_in, size_out=size_out, label='mask_decay')
+    #     def step(self, t, x):
+    #         vA, vB, vL, vR = x[0], x[1], x[2], x[3]
+    #         mA, mB, mL, mR = x[4], x[5], x[6], x[7]  # indicates the chosen variables
+    #         stop = x[8]  # turn learning off during iti/cue phase
+    #         w = x[9]  # current decoded omega
+    #         if stop==1:
+    #             self.state = np.zeros((self.size_out))
+    #         else:
+    #             drel = (mA*vA+mB*vB) - (mL*vL+mR*vR)  # dQ_chosen_stim - dQ_chosen_choice
+    #             wtar = int(drel>0)  # 1/0
+    #             self.state[0] = np.abs(drel) * (wtar - w) 
+    #         return self.state
 
     net = nengo.Network(seed=params['seed_net'])
     with net:
         # INPUTS
         in_f = nengo.Node([0,0,0,0])  # constant vector that provides features for learning values
         in_g = nengo.Node([0])  # constant vector that provides features for learning omega
-        # in_w = nengo.Node(params['w0'])  # baseline omega
         cue = CueNode(params)  # input trial-specific [+/- 1] if A on L/R
         vlet = VLetNode()  # takes vA, vB as input, outputs vLetL, vLetR
+        vcho = VChoNode()  # takes values as input, outputs [vChoLet, vChoLoc]
         rew = RewardNode(params)  # if action has been chosen, return trial-specific reward +/-1, and a generic reward signal: [signed_rew, abs_rew]
         mask_learn = MaskLearningNode(params)  # mask signal used to update the chosen values and locations: [mA, mB, mL, mR]
         mask_decay = MaskDecayNode(params)  # mask signal used to update the unchosen values and locations: [mA, mB, mL, mR] = 1 - mask_learn
@@ -304,7 +314,7 @@ def build_network(params):
         athr = ThrNode(params)  # inputs the dynamic action threshold, which linearly decreases from thr to 0 during t_cue
         evc = ApplyMaskNode()
         evu = ApplyMaskNode()
-        ewt = WNode(params)
+        # ewt = WNode(params)
         
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 4)  # value features
@@ -313,12 +323,13 @@ def build_network(params):
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
         afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
-        # vlet = nengo.Ensemble(params['neurons'], 4)  # learned values for letters, masked by letter location on current trial [vA, vB, mL, mR]
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         # evc = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for chosen option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         # evu = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined error vector for unchosn option and mask: [vA-E, vB-E, vL-E, vR-E, mA, mB, mL, mR]
         # drel = nengo.Ensemble(params['neurons'], 8, radius=4)  # combined value vector for chosen option and mask, for updaing omega: [vA, vB, vL, vR, mA, mB, mL, mR]
-        wtar = nengo.Ensemble(params['neurons'], 1)  # target omega value following action and reward  [wtar]
+        drel = nengo.Ensemble(params['neurons'], 2)  # represents [vChoLet, vChoLoc], computes difference for omega update
+        ewt = nengo.Ensemble(params['neurons'], 3, radius=2)  # represents all variables needed up update omega, computes the error [drel, wtar, w]
+        # wtar = nengo.Ensemble(params['neurons'], 1)  # target omega value following action and reward  [wtar]
         # ewt = nengo.Ensemble(params['neurons'], 1)  # error for omega update  [ew]
         # ewd = nengo.Ensemble(params['neurons'], 1)  # error for omega decay  [ew]
 
@@ -326,8 +337,6 @@ def build_network(params):
         # connect feature fectors to value populations and establish the learning connections
         nengo.Connection(in_f, f)
         nengo.Connection(in_g, g)
-        # cf = nengo.Connection(f[:2], v[:2], synapse=0.01, transform=0, learning_rule_type=nengo.PES(learning_rate=params['lr_let']))  # learned connection for letters
-        # cf2 = nengo.Connection(f[2:], v[2:], synapse=0.01, transform=0, learning_rule_type=nengo.PES(learning_rate=params['lr_loc']))  # learned connection for locations
         cf = nengo.Connection(f, v, synapse=0.01, transform=0, learning_rule_type=nengo.PES(learning_rate=params['lr_v']))
         cg = nengo.Connection(g, w, synapse=0.01, function=lambda x: params['w0'], learning_rule_type=nengo.PES(learning_rate=params['lr_w']))  # learned connection for omega
 
@@ -335,9 +344,6 @@ def build_network(params):
         nengo.Connection(v[:2], vlet[:2], synapse=0.01)  # [vA, vB]
         nengo.Connection(cue, vlet[2], synapse=None)  # [+/-1] if A on L/R
         nengo.Connection(vlet, vwa[:2], synapse=None)  # [vLetL, vLetR]
-        # nengo.Connection(cue, vlet[2:4])  # [1,0] if [A,B] or [0,1] if [B,A], serves as a mask for value routing in the network
-        # nengo.Connection(vlet, vwa[0], synapse=0.02, function=lambda x: x[0]*x[2]+x[1]*x[3])  # computes vLetL using above mask
-        # nengo.Connection(vlet, vwa[1], synapse=0.02, function=lambda x: x[1]*x[2]+x[0]*x[3])  # computes vLetR using above mask
         nengo.Connection(v[2:4], vwa[2:4], synapse=0.01)  # [vL, vL]
         nengo.Connection(w, vwa[4], synapse=0.01)  # [w]
 
@@ -368,11 +374,17 @@ def build_network(params):
         # nengo.Connection(drel, wtar, synapse=0.01, function=lambda x: [x[0]*x[4]+x[1]*x[5]-x[2]*x[6]-x[3]*x[7]])  # target omega based on delta reliability
         # nengo.Connection(wtar, ewt, synapse=0.01, function=lambda x: 1 if x>0 else 0)  # error for omega = 1-w if drel>0 else 0-w
         # nengo.Connection(w, ewt, synapse=0.01, transform=-1)  # omega current
-        # nengo.Connection(in_w, ewd)  # decay back towards w0
-        # nengo.Connection(w, ewd, synapse=0.01, transform=-1)  # decay proportional to omega current
-        nengo.Connection(v, ewt[:4], synapse=0.01)   # [vA, vB, vL, vR]
-        nengo.Connection(mask_learn, ewt[4:8])  # [mA, mB, mL, mR]
-        nengo.Connection(w, ewt[9], synapse=0.01)  # omega current
+        nengo.Connection(v, vcho[:4], synapse=0.01)   # [vA, vB, vL, vR]
+        nengo.Connection(mask_learn, vcho[4:8], synapse=None)  # [mA, mB, mL, mR]
+        nengo.Connection(vcho, drel, synapse=None)
+
+        nengo.Connection(drel, ewt[0], synapse=0.01, function=lambda x: np.abs(x[0]-x[1]))  # abs(drel)
+        nengo.Connection(drel, ewt[1], synapse=0.01, function=lambda x: 1 if (x[0]-x[1])>0 else 0)  # wtar = 1 if drel>0 else 0
+        nengo.Connection(w, ewt[2], synapse=0.01)
+
+        # nengo.Connection(v, ewt[:4], synapse=0.01)   # [vA, vB, vL, vR]
+        # nengo.Connection(mask_learn, ewt[4:8])  # [mA, mB, mL, mR]
+        # nengo.Connection(w, ewt[9], synapse=0.01)  # omega current
 
 
 
@@ -387,7 +399,8 @@ def build_network(params):
         # nengo.Connection(ewd, cg.learning_rule, synapse=0.01, transform=-params['gamma_w'])  # omega decay
         nengo.Connection(evc, cf.learning_rule, synapse=0.01, transform=params['alpha_v'])  # let learning
         nengo.Connection(evu, cf.learning_rule, synapse=0.01, transform=-params['gamma_v'])  # let decay
-        nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-params['alpha_w'])  # omega learning
+        # nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-params['alpha_w'])  # omega learning
+        nengo.Connection(ewt, cg.learning_rule, synapse=0.01, transform=-params['alpha_w'], function=lambda x: x[0]*(x[1]-x[2]))  # omega learning: dw = drel*(wtar-w)
 
         # inhibit learning and reset unless a reward is being delivered
         # nengo.Connection(rew[1], evc.neurons, transform=-1000*np.ones((params['neurons'], 1)))
@@ -396,7 +409,8 @@ def build_network(params):
         # nengo.Connection(rew[1], ewd.neurons, transform=-1000*np.ones((params['neurons'], 1)))
         nengo.Connection(rew[1], evc[8], synapse=None)
         nengo.Connection(rew[1], evu[8], synapse=None)
-        nengo.Connection(rew[1], ewt[8], synapse=None)
+        # nengo.Connection(rew[1], ewt[8], synapse=None)
+        nengo.Connection(rew[1], ewt.neurons, transform=-1000*np.ones((params['neurons'], 1)))
         
         # probes
         net.p_v = nengo.Probe(v, synapse=0.01)
