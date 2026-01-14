@@ -40,10 +40,11 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
-        'lr_v':1e-5,
-        'lr_w':4e-5,
+        'lr_v':2e-5,
+        'lr_w':5e-5,
         'ramp':0.3,
-        'thr': 1.0,
+        'thr':1.0,
+        'w0':0,
         'neurons':1000,
     }
     if config=='fixed':
@@ -51,16 +52,14 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
             'alpha_v':0.5,
             'gamma_v':1.0,
             'alpha_w':0.4,
-            'gamma_w':0.1,
         }
     elif config=='random':
         rng_net = np.random.default_rng(seed=params['seed_net'])
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.9, 1.0),
-            'w0':rng_net.uniform(0.49, 0.51),
-            'alpha_w':rng_net.uniform(0.4, 0.6),
-            'gamma_w':rng_net.uniform(0.05, 0.10),
+            'alpha_w':rng_net.uniform(0.5, 0.7),
+            # 'w0':rng_net.uniform(0.49, 0.51),
         }
     params = params | params_net  # combine two parameter dictionaries
     return params
