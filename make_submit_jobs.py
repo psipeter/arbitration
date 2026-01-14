@@ -8,7 +8,7 @@ for seed in range(10):
 	for monkey in ['V', 'W']:
 		for session in range(4):
 			for block in range(1,25):
-				fit_string = f"python model_1p7.py {seed} {monkey} {session} {block}"
+				fit_string = f"python model_1p7.py {monkey} {session} {block} {seed}"
 				file_string = f'{seed}_{monkey}_{session}_{block}.sh'
 				with open (file_string, 'w') as rsh:
 					rsh.write('''#!/bin/bash''')
