@@ -14,6 +14,7 @@ def simulate(monkey, session, block, trials, config='fixed'):
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
+    data_full_list = []
     with sim:
         for trial in range(1, params['trials']+1):
             if trial==1 or trial%10==0: print(f"trial {trial}")
@@ -22,9 +23,12 @@ def simulate(monkey, session, block, trials, config='fixed'):
             set_nodes(net, params, trial)
             sim.run(params['t_cue'])
             data = get_data(sim, net, params, trial)
+            data_full = get_data_full(sim, net, params, trial)
             data_list.append(data)
+            data_full_list.append(data_full)
     dataframe = pd.DataFrame(data_list)
-    return dataframe, sim, net
+    dataframe_full = pd.DataFrame(data_full_list)
+    return dataframe, dataframe_full, sim, net
     # return sim, net
 
 def get_params(monkey, session, block, trials=80, config='fixed'):
@@ -36,14 +40,14 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'seed_net':int(hashlib.md5(f"{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
         'seed_rew':int(hashlib.md5(f"{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
         't_iti':0.5,
-        't_cue':1.5,
+        't_cue':0.5,
         'p_rew':0.7,
         # 'lr_let':3e-5,
         # 'lr_loc':0e-5,
         'lr_v':2e-5,
         'lr_w':5e-5,
-        'ramp':0.3,
-        'thr':1.0,
+        'ramp':0.5,
+        'thr':0.5,
         'w0':0.5,
         'neurons':1000,
     }
@@ -96,6 +100,28 @@ def get_data(sim, net, params, trial):
         'tdec':sim.data[net.p_tdec][-1,0],
     }
     return data
+
+def get_data_full(sim, net, params, trial):
+    n_steps =  sim.trange().shape[0]
+    data = {
+        'monkey':   [params['monkey']] * n_steps,
+        'session':  [params['session']] * n_steps,
+        'block':    [params['block']] * n_steps,
+        'trial':    [trial] * n_steps,
+        'time':     sim.trange(),
+        'va':       sim.data[net.p_v][:, 0],
+        'vb':       sim.data[net.p_v][:, 1],
+        'vl':       sim.data[net.p_v][:, 2],
+        'vr':       sim.data[net.p_v][:, 3],
+        'al':       sim.data[net.p_a][:, 0],
+        'ar':       sim.data[net.p_a][:, 1],
+        'w':        sim.data[net.p_w][:, 0],
+        'dec':      sim.data[net.p_dec][:, 0],
+        'rew':      sim.data[net.p_rew][:, 0],
+        'acc':      sim.data[net.p_rew][:, 3],
+        'tdec':     sim.data[net.p_tdec][:, 0],
+    }
+    return pd.DataFrame(data)
 
 def build_network(params):
                 
@@ -402,7 +428,8 @@ if __name__ == "__main__":
     block = int(sys.argv[3])
     config = 'random'
     s = time.time()
-    nef_data, sim, net = simulate(monkey, session, block, trials=80, config='random')
+    nef_data, nef_data_full, sim, net = simulate(monkey, session, block, trials=80, config='random')
     nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}.pkl")
+    nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_full.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
