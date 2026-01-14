@@ -70,12 +70,12 @@ def set_nodes(net, params, trial):
     net.mask_learn.set(trial)
     net.mask_decay.set(trial)
     net.rew.set(trial)
-    net.act.set(True)
+    net.dec.set(True)
 def reset_nodes(net, params, trial):
     net.cue.reset()
     net.mask_learn.reset()
     net.mask_decay.reset()
-    net.act.set(False)
+    net.dec.set(False)
 
 def get_data(sim, net, params, trial):
     data = {
@@ -91,7 +91,7 @@ def get_data(sim, net, params, trial):
         'al':sim.data[net.p_a][-1,0],
         'ar':sim.data[net.p_a][-1,1],
         'w':sim.data[net.p_w][-1,0],
-        'act':sim.data[net.p_act][-1,0],
+        'dec':sim.data[net.p_dec][-1,0],
         'rew':sim.data[net.p_rew][-1,0],
         'acc':sim.data[net.p_rew][-1,3],
         'tdec':sim.data[net.p_tdec][-1,0],
@@ -146,9 +146,9 @@ def build_network(params):
             return self.state
 
     class ActionNode(nengo.Node):
-        def __init__(self, params, size_in=3, size_out=2):
+        def __init__(self, params, thr=0.01, size_in=1, size_out=2):
             self.go = False
-            self.thr = params['thr']
+            self.thr = thr
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
             self.state = np.zeros((size_out))
@@ -158,12 +158,11 @@ def build_network(params):
             self.go = go  # decision period has started
             self.state = np.zeros((self.size_out))
         def step(self, t, x):
-            aL, aR = x[0], x[1]
-            thr = x[2]
-            if self.go and np.abs(aL-aR) > thr and self.state[0]==0 :  # make a new choice once
+            dA = x[0]
+            if self.go and np.abs(dA)>self.thr and self.state[0]==0 :  # make a new choice once
                 t_dec = t % (self.t_iti + self.t_cue) - self.t_iti
-                if aL>aR: self.state[0] = 1
-                elif aR>aL: self.state[0] = -1
+                if dA>0: self.state[0] = 1
+                elif dA<0: self.state[0] = -1
                 else: self.state[0] = 0
                 self.state[1] = t_dec  # decision (reaction) time
             return self.state
@@ -289,7 +288,7 @@ def build_network(params):
         rew = RewardNode(params)  # if action has been chosen, return trial-specific reward +/-1, and a generic reward signal: [signed_rew, abs_rew]
         mask_learn = MaskLearningNode(params)  # mask signal used to update the chosen values and locations: [mA, mB, mL, mR]
         mask_decay = MaskDecayNode(params)  # mask signal used to update the unchosen values and locations: [mA, mB, mL, mR] = 1 - mask_learn
-        act = ActionNode(params)  # decides whether action values cross action threshold
+        dec = ActionNode(params)  # decides whether action values cross action threshold
         athr = ThrNode(params)  # inputs the dynamic action threshold, which linearly decreases from thr to 0 during t_cue
         mask_chosen = MaskErrorNode()
         mask_unchosen = MaskErrorNode()
@@ -301,6 +300,7 @@ def build_network(params):
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
         a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
         afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
+        ch = nengo.Ensemble(params['neurons'], 2, encoders=nengo.dists.Choice([[1,0],[0,1]]), intercepts=nengo.dists.Uniform(0.01, 1))
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         evc = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for chosen option: [evA, evB, evL, evR]
         evu = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for unchosn option: [evA, evB, evL, evR]
@@ -329,11 +329,14 @@ def build_network(params):
         nengo.Connection(a, afb, synapse=0.01)  # action integrator
         nengo.Connection(afb, a, synapse=0.1)  # integrate before action, decay after action
         nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
-        nengo.Connection(a, act[:2], synapse=0.01)  # send action values to action node
-        nengo.Connection(athr, act[2], synapse=None)  # send dynamic threshold to action node
-        nengo.Connection(act[0], rew, synapse=None)  # send [+/-1] to reward node
-        nengo.Connection(act[0], mask_learn, synapse=None)  # send [+/-1] to learning mask node
-        nengo.Connection(act[0], mask_decay, synapse=None)  # send [+/-1] to decay mask node
+
+        # send ramping action values to a choice population that is under dynamic inhibition
+        nengo.Connection(a, ch, synapse=0.01)  # send action values to choice population
+        nengo.Connection(athr, ch, transform=[[-1], [-1]], synapse=None)  # send dynamic threshold to choice population
+        nengo.Connection(ch, dec, synapse=0.01, function=lambda x: x[0]-x[1])  # send delta action values to action node
+        nengo.Connection(dec[0], rew, synapse=None)  # send [+/-1] to reward node
+        nengo.Connection(dec[0], mask_learn, synapse=None)  # send [+/-1] to learning mask node
+        nengo.Connection(dec[0], mask_decay, synapse=None)  # send [+/-1] to decay mask node
 
         # compute error for chosen values following choice and reward
         nengo.Connection(v, mask_chosen[:4], synapse=0.01)  # [vA, vB, vL, vR]
@@ -369,8 +372,9 @@ def build_network(params):
         net.p_w = nengo.Probe(w, synapse=0.01)
         net.p_a = nengo.Probe(a, synapse=0.01)
         net.p_afb = nengo.Probe(afb, synapse=0.01)
-        net.p_act = nengo.Probe(act[0])
-        net.p_tdec = nengo.Probe(act[1], synapse=None)
+        net.p_ch = nengo.Probe(ch, synapse=0.01)
+        net.p_dec = nengo.Probe(dec[0])
+        net.p_tdec = nengo.Probe(dec[1], synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
         net.p_vwa = nengo.Probe(vwa, synapse=0.01)
         net.p_evc = nengo.Probe(evc, synapse=0.01)
@@ -385,7 +389,7 @@ def build_network(params):
         net.s_a = nengo.Probe(a.neurons, synapse=None)
 
         net.cue = cue
-        net.act = act
+        net.dec = dec
         net.rew = rew
         net.mask_learn = mask_learn
         net.mask_decay = mask_decay
