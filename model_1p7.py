@@ -14,7 +14,6 @@ def simulate(monkey, session, block, trials, config='fixed'):
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
-    data_full_list = []
     with sim:
         for trial in range(1, params['trials']+1):
             if trial==1 or trial%10==0: print(f"trial {trial}")
@@ -23,11 +22,9 @@ def simulate(monkey, session, block, trials, config='fixed'):
             set_nodes(net, params, trial)
             sim.run(params['t_cue'])
             data = get_data(sim, net, params, trial)
-            data_full = get_data_full(sim, net, params, trial)
             data_list.append(data)
-            data_full_list.append(data_full)
     dataframe = pd.DataFrame(data_list)
-    dataframe_full = pd.DataFrame(data_full_list)
+    dataframe_full = get_data_full(sim, net, params)
     return dataframe, dataframe_full, sim, net
     # return sim, net
 
@@ -101,13 +98,12 @@ def get_data(sim, net, params, trial):
     }
     return data
 
-def get_data_full(sim, net, params, trial):
+def get_data_full(sim, net, params):
     n_steps =  sim.trange().shape[0]
     data = {
         'monkey':   [params['monkey']] * n_steps,
         'session':  [params['session']] * n_steps,
         'block':    [params['block']] * n_steps,
-        'trial':    [trial] * n_steps,
         'time':     sim.trange(),
         'va':       sim.data[net.p_v][:, 0],
         'vb':       sim.data[net.p_v][:, 1],
