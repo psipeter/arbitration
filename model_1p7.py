@@ -24,7 +24,8 @@ def simulate(monkey, session, block, trials, config='fixed'):
             data = get_data(sim, net, params, trial)
             data_list.append(data)
     dataframe = pd.DataFrame(data_list)
-    dataframe_full = get_data_full(sim, net, params)
+    # dataframe_full = get_data_full(sim, net, params)
+    dataframe_full = None
     return dataframe, dataframe_full, sim, net
     # return sim, net
 
@@ -426,6 +427,6 @@ if __name__ == "__main__":
     s = time.time()
     nef_data, nef_data_full, sim, net = simulate(monkey, session, block, trials=80, config='random')
     nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}.pkl")
-    nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_full.pkl")
+    # nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_full.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
