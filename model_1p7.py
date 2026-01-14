@@ -44,7 +44,7 @@ def get_params(monkey, session, block, trials=80, config='fixed'):
         'lr_w':5e-5,
         'ramp':0.3,
         'thr':1.0,
-        'w0':0,
+        'w0':0.5,
         'neurons':1000,
     }
     if config=='fixed':
