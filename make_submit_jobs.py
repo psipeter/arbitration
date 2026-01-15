@@ -29,4 +29,4 @@ for seed in range(10):
 			for block in range(1,25):
 				submit_string = ["sbatch", f"{seed}_{monkey}_{session}_{block}.sh"]
 				a = subprocess.run(submit_string)
-				time.sleep(1)  # wait a few seconds before next submission to help out SLURM system
+				time.sleep(0.5)  # wait a second before next submission to help out SLURM system
