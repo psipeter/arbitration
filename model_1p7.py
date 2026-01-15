@@ -21,9 +21,8 @@ def simulate(seed, monkey, session, block, trials, config='fixed'):
             sim.run(params['t_iti'])
             set_nodes('cue', net, params, trial, sim.data)
             sim.run(params['t_cue'])
-            data = get_data(sim, net, params, trial)
-            data_list.append(data)
             set_nodes('rew', net, params, trial, sim.data)
+            data_list.append(get_data(sim, net, params, trial))
             sim.run(params['t_rew'])
     dataframe = pd.DataFrame(data_list)
     # dataframe_full = get_data_full(sim, net, params)
@@ -106,10 +105,12 @@ def get_data(sim, net, params, trial):
         'ar':sim.data[net.p_a][-1,1],
         'w':sim.data[net.p_w][-1,0],
         'dec':sim.data[net.p_dec][-1,0],
-        'rew':sim.data[net.p_rew][-1,0],
-        'acc':sim.data[net.p_rew][-1,3],
-        'tdec':sim.data[net.p_tdec][-1,0],
-    }
+        'tdec':sim.data[net.p_dec][-1,1],
+        # 'rew':sim.data[net.p_rew][-1,0],  # probe doesn't update in time
+        # 'acc':sim.data[net.p_rew][-1,3],  # probe doesn't update in time
+        'rew':net.rew.state[0],
+        'acc':net.rew.state[3],
+        }
     return data
 
 def get_data_full(sim, net, params):
@@ -127,9 +128,9 @@ def get_data_full(sim, net, params):
         'ar':       sim.data[net.p_a][:, 1],
         'w':        sim.data[net.p_w][:, 0],
         'dec':      sim.data[net.p_dec][:, 0],
+        'tdec':      sim.data[net.p_dec][:, 1],
         'rew':      sim.data[net.p_rew][:, 0],
         'acc':      sim.data[net.p_rew][:, 3],
-        'tdec':     sim.data[net.p_tdec][:, 0],
     }
     return pd.DataFrame(data)
 
@@ -406,8 +407,7 @@ def build_network(params):
         net.p_a = nengo.Probe(a, synapse=params['tau_p'])
         net.p_afb = nengo.Probe(afb, synapse=params['tau_p'])
         net.p_ch = nengo.Probe(ch, synapse=params['tau_p'])
-        net.p_dec = nengo.Probe(dec[0], synapse=None)
-        net.p_tdec = nengo.Probe(dec[1], synapse=None)
+        net.p_dec = nengo.Probe(dec, synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
         net.p_vwa = nengo.Probe(vwa, synapse=params['tau_p'])
         net.p_evc = nengo.Probe(evc, synapse=params['tau_p'])
