@@ -45,13 +45,13 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         't_cue':1.0,
         't_rew':1.0,
         'p_rew':0.7,
-        'lr_let':3e-6,
+        'lr_let':4e-6,
         'lr_loc':2e-6,
-        'lr_w':5e-5,
+        'lr_w':3e-5,
         'ramp':1.0,
         'thr':0.5,
         'w0':0.5,
-        'neurons':1000,
+        'neurons':2000,
         'tau_ff':0.02,
         'tau_p':0.02,
         'tau_fb':0.1,
@@ -106,6 +106,7 @@ def get_data(sim, net, params, trial):
         'w':sim.data[net.p_w][-1,0],
         'dec':sim.data[net.p_dec][-1,0],
         'tdec':sim.data[net.p_dec][-1,1],
+        'thr':sim.data[net.p_thr][-1,0],
         # 'rew':sim.data[net.p_rew][-1,0],  # probe doesn't update in time
         # 'acc':sim.data[net.p_rew][-1,3],  # probe doesn't update in time
         'rew':net.rew.state[0],
@@ -128,7 +129,8 @@ def get_data_full(sim, net, params):
         'ar':       sim.data[net.p_a][::10, 1],
         'w':        sim.data[net.p_w][::10, 0],
         'dec':      sim.data[net.p_dec][::10, 0],
-        'tdec':      sim.data[net.p_dec][::10, 1],
+        'tdec':     sim.data[net.p_dec][::10, 1],
+        'thr':      sim.data[net.p_thr][::10, 0],
         'rew':      sim.data[net.p_rew][::10, 0],
         'acc':      sim.data[net.p_rew][::10, 3],
     }
@@ -340,8 +342,8 @@ def build_network(params):
         vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
         evc = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for chosen option: [evA, evB, evL, evR]
         evu = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for unchosn option: [evA, evB, evL, evR]
-        drel = nengo.Ensemble(params['neurons'], 2)  # represents [vChoLet, vChoLoc], computes difference for omega update
         ew = nengo.Ensemble(params['neurons'], 3, radius=2)  # represents all variables needed up update omega, computes the error [drel, wtar, w]
+        drel = nengo.Ensemble(params['neurons'], 2)  # represents [vChoLet, vChoLoc], computes difference for omega update
 
         # CONNECTIONS
         # connect feature fectors to value populations and establish the learning connections
