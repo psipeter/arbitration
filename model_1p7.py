@@ -47,11 +47,11 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         'p_rew':0.7,
         'lr_let':4e-6,
         'lr_loc':2e-6,
-        'lr_w':3e-5,
+        'lr_w':4e-5,
         'ramp':1.0,
         'thr':0.5,
         'w0':0.5,
-        'neurons':2000,
+        'neurons':3000,
         'tau_ff':0.02,
         'tau_p':0.02,
         'tau_fb':0.1,
@@ -67,7 +67,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.8, 1.0),
-            'alpha_w':rng_net.uniform(0.5, 0.7),
+            'alpha_w':rng_net.uniform(0.6, 0.8),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
     params = params | params_net  # combine two parameter dictionaries

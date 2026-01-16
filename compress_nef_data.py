@@ -2,7 +2,7 @@ import pandas as pd
 import re
 from pathlib import Path
 
-def process_nef_data(folder_path="data/nef/"):
+def process_nef_data(folder_path="data/nef/", do_full=False):
     path = Path(folder_path)
     
     # Define output paths
@@ -11,19 +11,20 @@ def process_nef_data(folder_path="data/nef/"):
 
     # --- PART 1: Process "_full.pkl" files ---
     # Captures files like: trial_1_full.pkl, trial_2_full.pkl
-    full_files = list(path.glob("*_full.pkl"))
-    
-    if full_files:
-        print(f"Concatenating {len(full_files)} '_full.pkl' files...")
-        df_full = pd.concat((pd.read_pickle(f) for f in full_files), ignore_index=True)
+    if do_full:
+        full_files = list(path.glob("*_full.pkl"))
         
-        print(f"Compressing (xz) and saving to {output_full}...")
-        df_full.to_pickle(output_full, compression="xz")
-        
-        # Explicitly clear memory
-        del df_full 
-    else:
-        print("No '_full.pkl' files found.")
+        if full_files:
+            print(f"Concatenating {len(full_files)} '_full.pkl' files...")
+            df_full = pd.concat((pd.read_pickle(f) for f in full_files), ignore_index=True)
+            
+            print(f"Compressing (xz) and saving to {output_full}...")
+            df_full.to_pickle(output_full, compression="xz")
+            
+            # Explicitly clear memory
+            del df_full 
+        else:
+            print("No '_full.pkl' files found.")
 
     # --- PART 2: Process "(number).pkl" files ---
     # Captures files like: trial_1.pkl, 10.pkl
