@@ -4,7 +4,7 @@ import subprocess
 import numpy as np
 import time
 
-for seed in range(10):
+for seed in range(5):
 	for monkey in ['V', 'W']:
 		for session in range(4):
 			for block in range(1,25):
@@ -23,7 +23,7 @@ for seed in range(10):
 					rsh.write("\n")
 					rsh.write(fit_string)
 
-for seed in range(10):
+for seed in range(5):
 	for monkey in ['V', 'W']:
 		for session in range(4):
 			for block in range(1,25):
