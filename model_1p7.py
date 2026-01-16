@@ -114,23 +114,23 @@ def get_data(sim, net, params, trial):
     return data
 
 def get_data_full(sim, net, params):
-    n_steps =  sim.trange().shape[0]
+    n_steps =  sim.trange()[::10].shape[0]
     data = {
         'monkey':   [params['monkey']] * n_steps,
         'session':  [params['session']] * n_steps,
         'block':    [params['block']] * n_steps,
-        'time':     sim.trange(),
-        'va':       sim.data[net.p_v][:, 0],
-        'vb':       sim.data[net.p_v][:, 1],
-        'vl':       sim.data[net.p_v][:, 2],
-        'vr':       sim.data[net.p_v][:, 3],
-        'al':       sim.data[net.p_a][:, 0],
-        'ar':       sim.data[net.p_a][:, 1],
-        'w':        sim.data[net.p_w][:, 0],
-        'dec':      sim.data[net.p_dec][:, 0],
-        'tdec':      sim.data[net.p_dec][:, 1],
-        'rew':      sim.data[net.p_rew][:, 0],
-        'acc':      sim.data[net.p_rew][:, 3],
+        'time':     sim.trange()[::10],
+        'va':       sim.data[net.p_v][::10, 0],
+        'vb':       sim.data[net.p_v][::10, 1],
+        'vl':       sim.data[net.p_v][::10, 2],
+        'vr':       sim.data[net.p_v][::10, 3],
+        'al':       sim.data[net.p_a][::10, 0],
+        'ar':       sim.data[net.p_a][::10, 1],
+        'w':        sim.data[net.p_w][::10, 0],
+        'dec':      sim.data[net.p_dec][::10, 0],
+        'tdec':      sim.data[net.p_dec][::10, 1],
+        'rew':      sim.data[net.p_rew][::10, 0],
+        'acc':      sim.data[net.p_rew][::10, 3],
     }
     return pd.DataFrame(data)
 
@@ -439,6 +439,6 @@ if __name__ == "__main__":
     s = time.time()
     nef_data, nef_data_full, sim, net = simulate(seed, monkey, session, block, trials=80, config='random')
     nef_data.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}.pkl")
-    nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_full.pkl")
+    nef_data_full.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}_full.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
