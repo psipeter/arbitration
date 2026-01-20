@@ -45,9 +45,9 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         't_cue':1.0,
         't_rew':1.0,
         'p_rew':0.7,
-        'lr_let':4e-6,
+        'lr_let':5e-6,
         'lr_loc':2e-6,
-        'lr_w':5e-5,
+        'lr_w':1e-4,
         'ramp':1.0,
         'thr':0.5,
         'w0':0.5,
@@ -188,7 +188,7 @@ def build_network(params):
             return self.state
 
     class DecisionNode(nengo.Node):
-        def __init__(self, params, size_in=2, size_out=2):
+        def __init__(self, params, size_in=2, size_out=3):
             self.go = False
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
@@ -207,6 +207,7 @@ def build_network(params):
                 if cL>cR: self.state[0] = 1
                 elif cR>cL: self.state[0] = -1
                 self.state[1] = t_dec  # decision (reaction) time
+                self.state[2] = 1  # some action has been chosen
             return self.state
 
     class RewardNode(nengo.Node):
@@ -365,7 +366,8 @@ def build_network(params):
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
         nengo.Connection(a, afb, synapse=params['tau_fb'])  # action integrator
         nengo.Connection(afb, a, synapse=params['tau_fb'])  # integrate before action, decay after action
-        nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
+        # nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
+        nengo.Connection(dec[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback if decision has been made
 
         # send ramping action values to a choice population that is under dynamic inhibition
         nengo.Connection(athr, ch, synapse=None, transform=[[-1],[-1]])  # send dynamic threshold to action population
