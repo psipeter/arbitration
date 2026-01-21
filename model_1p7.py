@@ -37,17 +37,14 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         'block':block,
         'trials':trials,
         'seed':seed,
-        'seed_net':seed,
-        'seed_rew':seed,
-        # 'seed_net':int(hashlib.md5(f"{N}_{monkey}_{session}".encode()).hexdigest(), 16) % (2**32),
-        # 'seed_rew':int(hashlib.md5(f"{N}_{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
+        # 'seed_net':seed,
+        # 'seed_rew':seed,
+        'seed_net':int(hashlib.md5(f"{seed}_{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
+        'seed_rew':int(hashlib.md5(f"{seed}_{monkey}_{session}_{block}".encode()).hexdigest(), 16) % (2**32),
         't_iti':1.0,
         't_cue':1.0,
         't_rew':1.0,
         'p_rew':0.7,
-        'lr_let':5e-6,
-        'lr_loc':5e-6,
-        'lr_w':5e-6,
         'ramp':1.0,
         'thr':0.5,
         'w0':0.5,
@@ -61,6 +58,9 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
             'alpha_v':0.5,
             'gamma_v':1.0,
             'alpha_w':0.4,
+            'lr_let':5e-6,
+            'lr_loc':5e-6,
+            'lr_w':5e-6,
         }
     elif config=='random':
         rng_net = np.random.default_rng(seed=params['seed_net'])
@@ -68,6 +68,9 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.8, 1.0),
             'alpha_w':rng_net.uniform(0.4, 0.6),
+            'lr_let':rng_net.uniform(3e-6, 7e-6),
+            'lr_loc':rng_net.uniform(3e-6, 7e-6),
+            'lr_w':rng_net.uniform(3e-6, 7e-6),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
     params = params | params_net  # combine two parameter dictionaries
