@@ -67,7 +67,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.8, 1.0),
-            'alpha_w':rng_net.uniform(0.4, 0.6),
+            'alpha_w':rng_net.uniform(0.0, 0.0),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
     params = params | params_net  # combine two parameter dictionaries
@@ -90,23 +90,24 @@ def set_nodes(phase, net, params, trial, data):
         net.rew.set(True, trial, action)
 
 def get_data(sim, net, params, trial):
+    tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
     data = {
         'seed':params['seed'],
         'monkey':params['monkey'],
         'session':params['session'],
         'block':params['block'],
         'trial':trial,
-        'va':sim.data[net.p_v][-1,0],
-        'vb':sim.data[net.p_v][-1,1],
-        'vl':sim.data[net.p_v][-1,2],
-        'vr':sim.data[net.p_v][-1,3],
-        'w':sim.data[net.p_w][-1,0],
-        'al':sim.data[net.p_a][-1,0],
-        'ar':sim.data[net.p_a][-1,1],
-        'w':sim.data[net.p_w][-1,0],
-        'dec':sim.data[net.p_dec][-1,0],
-        'tdec':sim.data[net.p_dec][-1,1],
-        'thr':sim.data[net.p_thr][-1,0],
+        'va':sim.data[net.p_v][tidx,0],
+        'vb':sim.data[net.p_v][tidx,1],
+        'vl':sim.data[net.p_v][tidx,2],
+        'vr':sim.data[net.p_v][tidx,3],
+        'w':sim.data[net.p_w][tidx,0],
+        'al':sim.data[net.p_a][tidx,0],
+        'ar':sim.data[net.p_a][tidx,1],
+        'w':sim.data[net.p_w][tidx,0],
+        'dec':sim.data[net.p_dec][tidx,0],
+        'tdec':sim.data[net.p_dec][tidx,1],
+        'thr':sim.data[net.p_thr][tidx,0],
         # 'rew':sim.data[net.p_rew][-1,0],  # probe doesn't update in time
         # 'acc':sim.data[net.p_rew][-1,3],  # probe doesn't update in time
         'rew':net.rew.state[0],
@@ -188,7 +189,7 @@ def build_network(params):
             return self.state
 
     class DecisionNode(nengo.Node):
-        def __init__(self, params, size_in=2, size_out=3):
+        def __init__(self, params, size_in=2, size_out=4):
             self.go = False
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
@@ -208,6 +209,7 @@ def build_network(params):
                 elif cR>cL: self.state[0] = -1
                 self.state[1] = t_dec  # decision (reaction) time
                 self.state[2] = 1  # some action has been chosen
+                self.state[3] = int(t/0.001)  # simulation timestep of decision
             return self.state
 
     class RewardNode(nengo.Node):
