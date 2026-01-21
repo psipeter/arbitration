@@ -46,8 +46,8 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         't_rew':1.0,
         'p_rew':0.7,
         'lr_let':5e-6,
-        'lr_loc':2e-6,
-        'lr_w':1e-4,
+        'lr_loc':5e-6,
+        'lr_w':5e-6,
         'ramp':1.0,
         'thr':0.5,
         'w0':0.5,
@@ -67,7 +67,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         params_net = {
             'alpha_v':rng_net.uniform(0.4, 0.6),
             'gamma_v':rng_net.uniform(0.8, 1.0),
-            'alpha_w':rng_net.uniform(0.7, 0.9),
+            'alpha_w':rng_net.uniform(0.4, 0.6),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
     params = params | params_net  # combine two parameter dictionaries
@@ -404,6 +404,10 @@ def build_network(params):
         nengo.Connection(rew[1], evc.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
         nengo.Connection(rew[1], evu.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
         nengo.Connection(rew[1], ew.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
+
+        # inhibit value estimate between decision time and reward presentation
+        nengo.Connection(dec[2], v.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # decision inhibits value neurons
+        nengo.Connection(rew[2], v.neurons, transform=+1000*np.ones((params['neurons'], 1)), synapse=None)  # decision excites value neurons, cancelling inhibition?
         
         # probes
         net.p_v = nengo.Probe(v, synapse=params['tau_p'])
