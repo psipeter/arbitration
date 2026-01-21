@@ -46,9 +46,9 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         't_rew':1.0,
         'p_rew':0.7,
         'ramp':1.0,
-        'thr':0.5,
+        'thr':0.7,
         'w0':0.5,
-        'neurons':1000,
+        'neurons':2000,
         'tau_ff':0.02,
         'tau_p':0.02,
         'tau_fb':0.1,
@@ -65,9 +65,9 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
     elif config=='random':
         rng_net = np.random.default_rng(seed=params['seed_net'])
         params_net = {
-            'alpha_v':rng_net.uniform(0.4, 0.6),
-            'gamma_v':rng_net.uniform(0.8, 1.0),
-            'alpha_w':rng_net.uniform(0.4, 0.6),
+            'alpha_v':rng_net.uniform(0.3, 0.6),
+            'gamma_v':rng_net.uniform(0.7, 1.0),
+            'alpha_w':rng_net.uniform(0.3, 0.6),
             'lr_let':rng_net.uniform(3e-6, 7e-6),
             'lr_loc':rng_net.uniform(3e-6, 7e-6),
             'lr_w':rng_net.uniform(3e-6, 7e-6),
