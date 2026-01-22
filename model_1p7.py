@@ -45,13 +45,15 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         't_cue':1.0,
         't_rew':1.0,
         'p_rew':0.7,
-        'ramp':1.0,
+        'r_let':0.6,
+        'r_loc':0.3,
         'thr':0.7,
         'w0':0.5,
         'neurons':2000,
         'tau_ff':0.02,
         'tau_p':0.02,
         'tau_fb':0.1,
+        'tau_inh':0.2,
     }
     if config=='fixed':
         params_net = {
@@ -68,8 +70,8 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
             'alpha_v':rng_net.uniform(0.3, 0.6),
             'gamma_v':rng_net.uniform(0.7, 1.0),
             'alpha_w':rng_net.uniform(0.3, 0.6),
-            'lr_let':rng_net.uniform(3e-6, 7e-6),
-            'lr_loc':rng_net.uniform(3e-6, 7e-6),
+            'lr_let':rng_net.uniform(3e-6, 6e-6),
+            'lr_loc':rng_net.uniform(3e-6, 6e-6),
             'lr_w':rng_net.uniform(3e-6, 7e-6),
             # 'w0':rng_net.uniform(0.49, 0.51),
         }
@@ -338,6 +340,7 @@ def build_network(params):
             return self.state    
 
     net = nengo.Network(seed=params['seed_net'])
+    winh = -1000*np.ones((params['neurons'], 1))
     with net:
         # INPUTS
         cue = CueNode(params)  # input trial-specific [+/- 1] if A on L/R
@@ -355,12 +358,13 @@ def build_network(params):
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 2)  # letter value features
         g = nengo.Ensemble(params['neurons'], 1)  # omega features
-        v = nengo.Ensemble(params['neurons'], 4)  # learned values: [vA, vB, vL, vR]
+        v = nengo.Ensemble(params['neurons'], 4, radius=0.5)  # learned values: [vA, vB, vL, vR]
         w = nengo.Ensemble(params['neurons'], 1)  # learned omega [w]
-        a = nengo.Ensemble(params['neurons'], 2)  # accumulated action values [aL, aR]
-        afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
+        a = nengo.Ensemble(params['neurons'], 2, radius=0.3)  # accumulated action values [aL, aR]
+        # afb = nengo.Ensemble(params['neurons'], 2)  # gate for feedback: inhibited during reward [aL, aR]
         ch = nengo.Ensemble(params['neurons'], 2, encoders=nengo.dists.Choice([[1,0],[0,1]]), intercepts=nengo.dists.Uniform(0.01, 1.0))
-        vwa = nengo.Ensemble(params['neurons'], 5, radius=2)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
+        vwa = nengo.Ensemble(params['neurons'], 5)  # combined value and omega population: [vLetL, vLetR, vL, vR, w]
+        vwa2 = nengo.Ensemble(1, 2, neuron_type=nengo.Direct())  # readout for VWA
         evc = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for chosen option: [evA, evB, evL, evR]
         evu = nengo.Ensemble(params['neurons'], 4, radius=2)  # combined error vector for unchosn option: [evA, evB, evL, evR]
         # ew = nengo.Ensemble(params['neurons'], 3, radius=2)  # represents all variables needed up update omega, computes the error [drel, wtar, w]
@@ -381,14 +385,23 @@ def build_network(params):
         nengo.Connection(w, vwa[4], synapse=params['tau_ff'])  # [w]
 
         # compute the overall action values using the arbitration weight
-        nengo.Connection(vwa, a[0], synapse=params['tau_ff'], transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
-        nengo.Connection(vwa, a[1], synapse=params['tau_ff'], transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
+        # nengo.Connection(vwa, a[0], synapse=params['tau_ff'], transform=params['ramp'], function=lambda x: x[0]*x[4]+x[2]*(1-x[4]))  # vLetL*w + vL*(1-w)
+        # nengo.Connection(vwa, a[1], synapse=params['tau_ff'], transform=params['ramp'], function=lambda x: x[1]*x[4]+x[3]*(1-x[4]))  # vLetR*w + vR*(1-w)
+        nengo.Connection(vwa, vwa2[0], synapse=params['tau_fb'], transform=params['r_let'], function=lambda x: x[0]*x[4])  # vLetL*w
+        nengo.Connection(vwa, vwa2[1], synapse=params['tau_fb'], transform=params['r_let'], function=lambda x: x[1]*x[4])  # vLetR*w
+        nengo.Connection(vwa, vwa2[0], synapse=params['tau_fb'], transform=params['r_loc'], function=lambda x: x[2]*(1-x[4]))  # vL*(1-w)
+        nengo.Connection(vwa, vwa2[1], synapse=params['tau_fb'], transform=params['r_loc'], function=lambda x: x[3]*(1-x[4]))  # vR*(1-w)
+
+        # drive the action population with weighted values
+        nengo.Connection(vwa2, a, synapse=None)  # [vA, vB, vL, vR, w]  - for readout
 
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
-        nengo.Connection(a, afb, synapse=params['tau_fb'])  # action integrator
-        nengo.Connection(afb, a, synapse=params['tau_fb'])  # integrate before action, decay after action
+        # nengo.Connection(a, afb, synapse=params['tau_fb'])  # action integrator
+        # nengo.Connection(afb, a, synapse=params['tau_fb'])  # integrate before action, decay after action
         # nengo.Connection(rew[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback based on phase
-        nengo.Connection(dec[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback if decision has been made
+        # nengo.Connection(dec[2], afb.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # inhibition controls feedback if decision has been made
+        nengo.Connection(a, a, synapse=params['tau_fb'])  # action integrator
+        nengo.Connection(dec[2], a.neurons, transform=winh/1000, synapse=nengo.Alpha(params['tau_inh']))  # inhibition controls feedback if decision has been made
 
         # send ramping action values to a choice population that is under dynamic inhibition
         nengo.Connection(athr, ch, synapse=None, transform=[[-1],[-1]])  # send dynamic threshold to action population
@@ -427,23 +440,24 @@ def build_network(params):
         nengo.Connection(ew, cw.learning_rule, synapse=params['tau_ff'], transform=-params['alpha_w'])  # omega learning
 
         # inhibit learning and reset unless a reward is being delivered
-        nengo.Connection(rew[1], evc.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
-        nengo.Connection(rew[1], evu.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
-        nengo.Connection(rew[1], ew.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)
+        nengo.Connection(rew[1], evc.neurons, transform=winh, synapse=None)
+        nengo.Connection(rew[1], evu.neurons, transform=winh, synapse=None)
+        nengo.Connection(rew[1], ew.neurons, transform=winh, synapse=None)
 
         # inhibit value estimate between decision time and reward presentation
-        nengo.Connection(dec[2], v.neurons, transform=-1000*np.ones((params['neurons'], 1)), synapse=None)  # decision inhibits value neurons
-        nengo.Connection(rew[2], v.neurons, transform=+1000*np.ones((params['neurons'], 1)), synapse=None)  # decision excites value neurons, cancelling inhibition?
+        nengo.Connection(dec[2], v.neurons, transform=winh, synapse=None)  # decision inhibits value neurons
+        nengo.Connection(rew[2], v.neurons, transform=-winh, synapse=None)  # decision excites value neurons, cancelling inhibition?
         
         # probes
         net.p_v = nengo.Probe(v, synapse=params['tau_p'])
         net.p_w = nengo.Probe(w, synapse=params['tau_p'])
         net.p_a = nengo.Probe(a, synapse=params['tau_p'])
-        net.p_afb = nengo.Probe(afb, synapse=params['tau_p'])
+        # net.p_afb = nengo.Probe(afb, synapse=params['tau_p'])
         net.p_ch = nengo.Probe(ch, synapse=params['tau_p'])
         net.p_dec = nengo.Probe(dec, synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
         net.p_vwa = nengo.Probe(vwa, synapse=params['tau_p'])
+        net.p_vwa2 = nengo.Probe(vwa2, synapse=None)
         net.p_evc = nengo.Probe(evc, synapse=params['tau_p'])
         net.p_evu = nengo.Probe(evu, synapse=params['tau_p'])
         net.p_ew = nengo.Probe(ew, synapse=params['tau_p'])
