@@ -54,7 +54,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         'tau_p':0.02,
         'tau_fb':0.1,
         'tau_inh':0.1,
-        'pert_w':'inh',
+        'pert_w':0.3,
     }
     if config=='fixed':
         params_net = {
