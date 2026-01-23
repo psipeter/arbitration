@@ -53,7 +53,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         'tau_ff':0.02,
         'tau_p':0.02,
         'tau_fb':0.1,
-        'tau_inh':0.2,
+        'tau_inh':0.1,
     }
     if config=='fixed':
         params_net = {
@@ -326,17 +326,14 @@ def build_network(params):
             return self.state    
 
     class WTarNode(nengo.Node):
-        def __init__(self, size_in=3, size_out=1):
+        def __init__(self, size_in=2, size_out=1):
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='wtar')
         def step(self, t, x):
             vc_let = x[0]  # value of chosen letter
             vc_loc = x[1]  # value of chosen letter
-            w = x[2]  # current omega
             drel = vc_let - vc_loc
-            wtar = 1 if drel>0 else 0
-            # self.state[0] = np.abs(drel) * (wtar - w)
-            self.state[0] = wtar - w
+            self.state[0] = 1 if drel>0 else 0
             return self.state    
 
     net = nengo.Network(seed=params['seed_net'])
@@ -422,9 +419,9 @@ def build_network(params):
         # compute error for omega following choice and reward
         nengo.Connection(v, vcho[:4], synapse=params['tau_ff'])   # [vA, vB, vL, vR]
         nengo.Connection(mask_learn, vcho[4:8], synapse=None)  # [mA, mB, mL, mR]
-        nengo.Connection(vcho, wtar[:2], synapse=params['tau_ff'])
-        nengo.Connection(w, wtar[2], synapse=params['tau_ff'])
-        nengo.Connection(wtar, ew, synapse=None)
+        nengo.Connection(vcho, wtar, synapse=params['tau_ff'])
+        nengo.Connection(wtar, ew, synapse=None, transform=-1)
+        nengo.Connection(w, ew, synapse=params['tau_ff'])
 
         # nengo.Connection(vcho, drel, synapse=None)
         # nengo.Connection(drel, ew[0], synapse=params['tau_ff'], function=lambda x: np.abs(x[0]-x[1]))  # abs(drel)
@@ -436,8 +433,7 @@ def build_network(params):
         nengo.Connection(evc[2:], cloc.learning_rule, synapse=params['tau_ff'], transform=params['alpha_v'])  # learning
         nengo.Connection(evu[:2], clet.learning_rule, synapse=params['tau_ff'], transform=-params['gamma_v'])  # decay
         nengo.Connection(evu[2:], cloc.learning_rule, synapse=params['tau_ff'], transform=-params['gamma_v'])  # decay
-        # nengo.Connection(ew, cw.learning_rule, synapse=params['tau_ff'], transform=-params['alpha_w'], function=lambda x: x[0]*(x[1]-x[2]))  # omega learning: dw = drel*(wtar-w)
-        nengo.Connection(ew, cw.learning_rule, synapse=params['tau_ff'], transform=-params['alpha_w'])  # omega learning
+        nengo.Connection(ew, cw.learning_rule, synapse=params['tau_ff'], transform=params['alpha_w'])  # omega learning
 
         # inhibit learning and reset unless a reward is being delivered
         nengo.Connection(rew[1], evc.neurons, transform=winh, synapse=None)
