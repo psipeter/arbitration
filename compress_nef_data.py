@@ -2,7 +2,7 @@ import pandas as pd
 import re
 from pathlib import Path
 
-def process_nef_data(folder_path="data/nef/", do_full=False):
+def process_nef_data(folder_path="data/nef/", do_full=True):
     path = Path(folder_path)
     
     # Define output paths
