@@ -49,7 +49,7 @@ def process_nef_data(folder_path="data/nef/", do_full=True, do_pert=True):
             print(f"Concatenating {len(full_files)} '_pert.pkl' files...")
             df_pert = pd.concat((pd.read_pickle(f) for f in pert_files), ignore_index=True)
             
-            print(f"Compressing (xz) and saving to {output_full}...")
+            print(f"Compressing (xz) and saving to {output_pert}...")
             df_pert.to_pickle(output_full, compression="xz")
             
             # Explicitly clear memory
