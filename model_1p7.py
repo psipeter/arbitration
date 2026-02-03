@@ -9,28 +9,40 @@ import pickle
 import h5py
 import hashlib
 
-def simulate(seed, monkey, session, block, trials, config='fixed'):
+def simulate(seed, monkey, session, block, trials, config):
     params = get_params(seed, monkey, session, block, trials, config)
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
+    pert_list = []
+    pert_train = params['perturbs'][0] if params['pert_type']=='train' else 0
     with sim:
         for trial in range(1, params['trials']+1):
             if trial==1 or trial%10==0: print(f"trial {trial}")
-            set_nodes('iti', net, params, trial, sim.data)
+            set_nodes('iti', net, params, trial, sim.data, pert_train)
             sim.run(params['t_iti'])
-            set_nodes('cue', net, params, trial, sim.data)
+            set_nodes('cue', net, params, trial, sim.data, pert_train)
             sim.run(params['t_cue'])
-            set_nodes('rew', net, params, trial, sim.data)
-            data_list.append(get_data(sim, net, params, trial))
+            set_nodes('rew', net, params, trial, sim.data, pert_train)
+            data_list.append(get_data(sim, net, params, trial, pert_train))
             sim.run(params['t_rew'])
+        if params['pert_type']=='test':
+            # run perturbation experiment after final trial: push omega, record values and action, but do not learn
+            print('running perturbations')
+            for pert_test in params['perturbs']:
+                set_nodes('iti', net, params, trial, sim.data, pert_test)
+                sim.run(params['t_iti'])
+                set_nodes('cue', net, params, trial, sim.data, pert_test)
+                sim.run(params['t_cue'])
+                pert_list.append(get_data(sim, net, params, trial, pert_test))
+                sim.run(params['t_rew'])  # run empty reward to keep trial times aligned
     dataframe = pd.DataFrame(data_list)
     dataframe_full = get_data_full(sim, net, params)
-    # dataframe_full = None
-    return dataframe, dataframe_full, sim, net
+    dataframe_pert = pd.DataFrame(pert_list) if params['pert_type']=='test' else None
+    return dataframe, dataframe_full, dataframe_pert, sim, net
     # return sim, net
 
-def get_params(seed, monkey, session, block, trials=80, config='fixed'):
+def get_params(seed, monkey, session, block, trials=80, config='random'):
     params = {
         'monkey':monkey,
         'session':session,
@@ -54,7 +66,8 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         'tau_p':0.02,
         'tau_fb':0.1,
         'tau_inh':0.1,
-        'pert_w':None,
+        'pert_type':'test',  # None, 'train', 'test'
+        'perturbs':[-0.2, -0.1, 0, 0.1, 0.2],
     }
     if config=='fixed':
         params_net = {
@@ -70,7 +83,7 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
         params_net = {
             'alpha_v':rng_net.uniform(0.3, 0.6),
             'gamma_v':rng_net.uniform(0.7, 1.0),
-            'alpha_w':rng_net.uniform(0.3, 0.6),
+            'alpha_w':rng_net.uniform(0.2, 0.4),
             'lr_let':rng_net.uniform(3e-6, 6e-6),
             'lr_loc':rng_net.uniform(3e-6, 6e-6),
             'lr_w':rng_net.uniform(3e-6, 7e-6),
@@ -79,13 +92,14 @@ def get_params(seed, monkey, session, block, trials=80, config='fixed'):
     params = params | params_net  # combine two parameter dictionaries
     return params
 
-def set_nodes(phase, net, params, trial, data):
+def set_nodes(phase, net, params, trial, data, pert):
     if phase=='iti':
         net.cue.set(False, None)
         net.mask_learn.set(False, None, None)
         net.mask_decay.set(False, None, None)
         net.dec.set(False)
         net.rew.set(False, None, None)
+        net.pert.set(pert)
     elif phase=='cue':
         net.cue.set(True, trial)
         net.dec.set(True)
@@ -94,8 +108,9 @@ def set_nodes(phase, net, params, trial, data):
         net.mask_learn.set(True, trial, action)
         net.mask_decay.set(True, trial, action)
         net.rew.set(True, trial, action)
+        net.pert.set(0)
 
-def get_data(sim, net, params, trial):
+def get_data(sim, net, params, trial, pert):
     tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
     data = {
         'seed':params['seed'],
@@ -108,16 +123,20 @@ def get_data(sim, net, params, trial):
         'vl':sim.data[net.p_v][tidx,2],
         'vr':sim.data[net.p_v][tidx,3],
         'w':sim.data[net.p_w][tidx,0],
+        'vwa_a':sim.data[net.p_vwa][tidx,0],  # note: letter on L
+        'vwa_b':sim.data[net.p_vwa][tidx,1],  # note: letter on R
+        'vwa_l':sim.data[net.p_vwa][tidx,2],
+        'vwa_r':sim.data[net.p_vwa][tidx,3],
+        'vwa_w':sim.data[net.p_vwa][tidx,4],
         'al':sim.data[net.p_a][tidx,0],
         'ar':sim.data[net.p_a][tidx,1],
         'w':sim.data[net.p_w][tidx,0],
         'dec':sim.data[net.p_dec][tidx,0],
         'tdec':sim.data[net.p_dec][tidx,1],
         'thr':sim.data[net.p_thr][tidx,0],
-        # 'rew':sim.data[net.p_rew][-1,0],  # probe doesn't update in time
-        # 'acc':sim.data[net.p_rew][-1,3],  # probe doesn't update in time
         'rew':net.rew.state[0],
         'acc':net.rew.state[3],
+        'pert':pert,
         }
     return data
 
@@ -338,24 +357,16 @@ def build_network(params):
             return self.state
 
     class PertNode(nengo.Node):
-        def __init__(self, params, size_in=0, size_out=2):
+        def __init__(self, size_in=1, size_out=1):
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
             self.t_rew = params['t_rew']
-            perturb = params['pert_w']
-            if perturb=='inh':
-                self.state = np.array([0,1])  # [state input to w pop, inh input to ew pop]
-            elif perturb is not None:
-                self.state = np.array([perturb, 0])
-            else:
-                self.state = np.zeros((size_out))
-            super().__init__(self.step, size_in=size_in, size_out=size_out, label='wtar')
-        def step(self, t):
-            t_since_cue = t % (self.t_iti + self.t_cue + self.t_rew) - self.t_iti
-            if t_since_cue < self.t_cue:
-                return self.state
-            else:
-                return np.array([0, self.state[1]])  # don't drive w during reward phase, or learning will accomodate drive
+            self.state = np.zeros((size_out))
+            super().__init__(self.step, size_in=size_in, size_out=size_out, label='pert')
+        def set(self, pert):
+            self.state[0] = pert
+        def step(self, t, x):
+            return self.state
 
     net = nengo.Network(seed=params['seed_net'])
     winh = -1000*np.ones((params['neurons'], 1))
@@ -372,7 +383,7 @@ def build_network(params):
         athr = ThrNode(params)  # inputs the dynamic action threshold, which linearly decreases from thr to 0 during t_cue
         mask_chosen = MaskErrorNode()
         mask_unchosen = MaskErrorNode()
-        pert = PertNode(params)  # perturbs w or ew population: [w drive, ew inhibition]
+        pert = PertNode()  # perturbs w population: [w drive]
         
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 2)  # letter value features
@@ -448,9 +459,8 @@ def build_network(params):
         nengo.Connection(dec[2], v.neurons, transform=winh, synapse=None)  # decision inhibits value neurons
         nengo.Connection(rew[2], v.neurons, transform=-winh, synapse=None)  # decision excites value neurons, cancelling inhibition
 
-        # perturb omega representation, either by removing learning (so that w stays at w0) or driving omega towards 1 or 0
-        nengo.Connection(pert[0], w, synapse=None)
-        nengo.Connection(pert[1], ew.neurons, transform=winh, synapse=None)
+        # perturb omega representation by driving omega towards 1 or 0
+        nengo.Connection(pert, w, synapse=None)
         
         # probes
         net.p_v = nengo.Probe(v, synapse=params['tau_p'])
@@ -480,6 +490,7 @@ def build_network(params):
         net.rew = rew
         net.mask_learn = mask_learn
         net.mask_decay = mask_decay
+        net.pert = pert
     
         return net
 
@@ -490,8 +501,10 @@ if __name__ == "__main__":
     seed = int(sys.argv[4])
     config = 'random'
     s = time.time()
-    nef_data, nef_data_full, sim, net = simulate(seed, monkey, session, block, trials=80, config='random')
+    nef_data, nef_data_full, nef_data_pert, sim, net = simulate(seed, monkey, session, block, trials=80, config='random')
     nef_data.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}.pkl")
     nef_data_full.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}_full.pkl")
+    if np.any(nef_data_pert):
+        nef_data_pert.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}_pert.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
