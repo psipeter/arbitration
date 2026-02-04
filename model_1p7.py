@@ -66,7 +66,7 @@ def get_params(seed, monkey, session, block, trials=80, config='random'):
         'tau_p':0.02,
         'tau_fb':0.1,
         'tau_inh':0.1,
-        'pert_type':'test',  # None, 'train', 'test'
+        'pert_type':None,  # None, 'train', 'test'
         'perturbs':[-0.2, -0.1, 0, 0.1, 0.2],
     }
     if config=='fixed':
