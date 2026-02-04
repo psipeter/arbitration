@@ -491,7 +491,7 @@ if __name__ == "__main__":
     block = int(sys.argv[3])
     seed = int(sys.argv[4])
     pert_trial = int(sys.argv[5])
-    pert_values = [-0.2, 0, 0.2]
+    pert_values = [-0.2, -0.1, 0, 0.1, 0.2]
     config = 'random'
     s = time.time()
     dfs = []
