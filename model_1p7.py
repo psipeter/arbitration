@@ -9,8 +9,8 @@ import pickle
 import h5py
 import hashlib
 
-def simulate(seed, monkey, session, block, trials, config, pert_trial, pert_value):
-    params = get_params(seed, monkey, session, block, trials, config, pert_trial, pert_value)
+def simulate(monkey, session, block, seed, trials, config, pert):
+    params = get_params(monkey, session, block, seed, trials, config, pert)
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
@@ -28,7 +28,7 @@ def simulate(seed, monkey, session, block, trials, config, pert_trial, pert_valu
     dataframe_full = None  # get_data_full(sim, net, params)
     return dataframe, dataframe_full, sim, net
 
-def get_params(seed, monkey, session, block, trials=80, config='random', pert_trial=None, pert_value=0):
+def get_params(monkey, session, block, seed, trials=80, config='random', pert={}):
     params = {
         'monkey':monkey,
         'session':session,
@@ -52,8 +52,9 @@ def get_params(seed, monkey, session, block, trials=80, config='random', pert_tr
         'tau_p':0.02,
         'tau_fb':0.1,
         'tau_inh':0.1,
-        'pert_trial':pert_trial,
-        'pert_value':pert_value,
+        'pert_start':pert['pert_start'],
+        'pert_end':pert['pert_end'],
+        'pert_value':pert['pert_value'],
     }
     if config=='fixed':
         params_net = {
@@ -94,15 +95,15 @@ def set_nodes(phase, net, params, trial, data):
         net.mask_learn.set(True, trial, action)
         net.mask_decay.set(True, trial, action)
         net.rew.set(True, trial, action)
-        net.pert.reset()
+        # net.pert.reset()
 
 def get_data(sim, net, params, trial):
     tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
     data = {
-        'seed':params['seed'],
         'monkey':params['monkey'],
         'session':params['session'],
         'block':params['block'],
+        'seed':params['seed'],
         'trial':trial,
         'va':sim.data[net.p_v][tidx,0],
         'vb':sim.data[net.p_v][tidx,1],
@@ -122,7 +123,8 @@ def get_data(sim, net, params, trial):
         'thr':sim.data[net.p_thr][tidx,0],
         'rew':net.rew.state[0],
         'acc':net.rew.state[3],
-        'pert_trial':params['pert_trial'],
+        'pert_start':params['pert_start'],
+        'pert_end':params['pert_end'],
         'pert_value':params['pert_value'],
         }
     return data
@@ -348,14 +350,15 @@ def build_network(params):
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
             self.t_rew = params['t_rew']
-            self.pert_trial = params['pert_trial']
+            self.pert_start = params['pert_start']
+            self.pert_end = params['pert_end']
             self.pert_value = params['pert_value']
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='pert')
         def reset(self):
             self.state[0] = 0
         def set(self, trial):
-            self.state[0] = self.pert_value if trial==self.pert_trial else 0
+            self.state[0] = self.pert_value if self.pert_start<=trial<self.pert_end else 0
         def step(self, t, x):
             return self.state
 
@@ -490,16 +493,18 @@ if __name__ == "__main__":
     session = int(sys.argv[2])
     block = int(sys.argv[3])
     seed = int(sys.argv[4])
-    pert_trial = int(sys.argv[5])
-    pert_values = [-0.2, -0.1, 0, 0.1, 0.2]
+    pert_start = int(sys.argv[5])
+    pert_end = int(sys.argv[6])
+    pert_values = [-0.2, 0, 0.2]
     config = 'random'
     s = time.time()
     dfs = []
     for pert_value in pert_values:
-        df, full, sim, net = simulate(seed, monkey, session, block, 80, config, pert_trial, pert_value)
+        pert = {'pert_start':pert_start, 'pert_end':pert_end, 'pert_value':pert_value}
+        df, full, sim, net = simulate(monkey, session, block, seed, 80, config, pert)
         dfs.append(df)
     nef_data = pd.concat(dfs, ignore_index=True)
-    nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_{pert_trial}.pkl")
-    # nef_data_full.to_pickle(f"data/nef/{seed}_{monkey}_{session}_{block}_full.pkl")
+    nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_{pert_start}.pkl")
+    # nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_full.pkl")
     e = time.time()
     print(f"runtime (min): {(e-s)/60:.4}")
