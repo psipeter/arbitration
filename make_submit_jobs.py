@@ -39,4 +39,4 @@ for monkey in monkeys:
 					pert_start = pert_times[p]
 					submit_string = ["sbatch", f"{monkey}_{session}_{block}_{seed}_{pert_start}.sh"]
 					a = subprocess.run(submit_string)
-					time.sleep(0.1)  # wait a second before next submission to help out SLURM system
+					time.sleep(0.2)  # wait a second before next submission to help out SLURM system

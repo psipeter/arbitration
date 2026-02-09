@@ -14,6 +14,7 @@ def simulate(monkey, session, block, seed, trials, config, pert):
     net = build_network(params)
     sim = nengo.Simulator(net, progress_bar=False)
     data_list = []
+    s_vwa_list, s_a_list = [], []
     with sim:
         for trial in range(1, params['trials']+1):
             if trial==1 or trial%10==0: print(f"trial {trial}")
@@ -23,10 +24,14 @@ def simulate(monkey, session, block, seed, trials, config, pert):
             sim.run(params['t_cue'])
             set_nodes('rew', net, params, trial, sim.data)
             data_list.append(get_data(sim, net, params, trial))
+            s_vwa, s_a = get_spikes(sim, net, params, trial)
+            s_vwa_list.append(s_vwa)
+            s_a_list.append(s_a)
             sim.run(params['t_rew'])
     dataframe = pd.DataFrame(data_list)
     dataframe_full = None  # get_data_full(sim, net, params)
-    return dataframe, dataframe_full, sim, net
+    spikes = {'vwa': np.array(s_vwa_list), 'a': np.array(s_a_list)}
+    return dataframe, dataframe_full, spikes, sim, net
 
 def get_params(monkey, session, block, seed, trials=80, config='random', pert={}):
     params = {
@@ -150,6 +155,20 @@ def get_data_full(sim, net, params):
         'acc':      sim.data[net.p_rew][::10, 3],
     }
     return pd.DataFrame(data)
+
+def get_spikes(sim, net, params, trial):
+    tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
+    vwa_spikes = sim.data[net.s_vwa][tidx]
+    a_spikes = sim.data[net.s_a][tidx]
+    return np.array(vwa_spikes), np.array(a_spikes)
+
+def save_hdf5(data, filename):
+    with h5py.File(filename, 'w') as f:
+        for label, sub_dict in data.items():
+            group = f.create_group(label)
+            for sublabel, array in sub_dict.items():
+                # Setting chunks=True allows HDF5 to manage memory better for large arrays
+                group.create_dataset(sublabel, data=array, compression="gzip", compression_opts=4, chunks=True)
 
 def build_network(params):
                 
@@ -476,8 +495,8 @@ def build_network(params):
         net.p_mask_learn = nengo.Probe(mask_learn, synapse=None)
         net.p_mask_decay = nengo.Probe(mask_decay, synapse=None)
         net.p_pert = nengo.Probe(pert, synapse=None)
-        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
-        net.s_a = nengo.Probe(a.neurons, synapse=None)
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
+        net.s_a = nengo.Probe(a.neurons, synapse=params['tau_p'])
 
         net.cue = cue
         net.dec = dec
@@ -497,14 +516,18 @@ if __name__ == "__main__":
     pert_end = int(sys.argv[6])
     pert_values = [-0.2, 0, 0.2]
     config = 'random'
-    s = time.time()
+    start = time.time()
     dfs = []
+    spikes = {'vwa': {}, 'a': {}}
     for pert_value in pert_values:
         pert = {'pert_start':pert_start, 'pert_end':pert_end, 'pert_value':pert_value}
-        df, full, sim, net = simulate(monkey, session, block, seed, 80, config, pert)
+        df, full, s, sim, net = simulate(monkey, session, block, seed, 80, config, pert)
         dfs.append(df)
+        spikes['vwa'][str(pert_value)] = s['vwa']
+        spikes['a'][str(pert_value)] = s['a']
     nef_data = pd.concat(dfs, ignore_index=True)
     nef_data.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_{pert_start}.pkl")
+    save_hdf5(spikes, f"data/nef/{monkey}_{session}_{block}_{seed}_{pert_start}.h5")
     # nef_data_full.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_full.pkl")
-    e = time.time()
-    print(f"runtime (min): {(e-s)/60:.4}")
+    end = time.time()
+    print(f"runtime (min): {(end-start)/60:.4}")

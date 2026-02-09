@@ -1,14 +1,16 @@
 import pandas as pd
 import re
+import h5py
 from pathlib import Path
 
-def process_nef_data(folder_path="data/nef/", do_full=True, do_pert=True):
+def process_nef_data(folder_path="data/nef/", do_full=False, do_pert=False, do_spikes=True):
     path = Path(folder_path)
     
     # Define output paths
     output_pert = path / "nef_data_pert.pkl.xz"
     output_full = path / "nef_data_full.pkl.xz"
     output_num  = path / "nef_data.pkl.xz"
+    output_spikes = path / "nef_data_spikes.h5"
 
     # --- PART 1: Process "_full.pkl" files ---
     if do_full:
@@ -56,6 +58,37 @@ def process_nef_data(folder_path="data/nef/", do_full=True, do_pert=True):
             del df_pert
         else:
             print("No '_pert.pkl' files found.")
+
+    # --- PART 4: Process HDF5 Spike Files ---
+    if do_spikes:
+        spike_files = list(path.glob("*.h5"))
+        if spike_files:
+            spike_files = [f for f in spike_files if f.name != output_spikes.name]
+            
+            if output_spikes.exists():
+                output_spikes.unlink()
+
+            print(f"\nMerging {len(spike_files)} files into hierarchical HDF5...")
+            with h5py.File(output_spikes, 'w') as master_h5:
+                for f_path in spike_files:
+                    parts = f_path.stem.split('_')
+                    
+                    if len(parts) == 5:
+                        m, sess, blk, seed, pert = parts
+                        # 1. Create the nested group structure manually
+                        # require_group ensures it's created if missing, or returned if it exists
+                        target_group = master_h5.require_group(f"{m}/{sess}/{blk}/{seed}/{pert}")
+                        
+                        with h5py.File(f_path, 'r') as source_h5:
+                            # 2. Copy each item FROM the source root TO the target group
+                            for name in source_h5.keys():
+                                if name in target_group:
+                                    del target_group[name] # Overwrite if exists
+                                source_h5.copy(name, target_group)
+                    else:
+                        print(f"Skipping {f_path.name}: Name format not recognized.")
+            
+            print(f"Hierarchical collection saved to {output_spikes}")
 
     print("\nProcess complete.")
 
