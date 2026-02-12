@@ -7,8 +7,9 @@ import time
 monkeys = ['V', 'W']
 sessions = range(4)
 blocks = range(1,25)
-seeds = range(1)
-pert_times = np.arange(1, 91, 10)
+seeds = range(3)
+# pert_times = np.arange(1, 91, 10)
+pert_times = [1,11]
 for monkey in monkeys:
 	for session in sessions:
 		for block in blocks:
@@ -21,13 +22,13 @@ for monkey in monkeys:
 					with open (file_string, 'w') as rsh:
 						rsh.write('''#!/bin/bash''')
 						rsh.write("\n")
-						rsh.write('''#SBATCH --mem=32G''')
+						rsh.write('''#SBATCH --mem=16G''')
 						rsh.write("\n")
 						rsh.write('''#SBATCH --nodes=1''')
 						rsh.write("\n")
 						rsh.write('''#SBATCH --ntasks-per-node=1''')
 						rsh.write("\n")
-						rsh.write('''#SBATCH --time=0:59:0''')
+						rsh.write('''#SBATCH --time=0:30:0''')
 						rsh.write("\n")
 						rsh.write(fit_string)
 
