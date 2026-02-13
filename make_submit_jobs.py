@@ -13,7 +13,7 @@ for monkey in monkeys:
 		for block in blocks:
 			for seed in seeds:
 				fit_string = f"python model_1p7.py {monkey} {session} {block} {seed}"
-				file_string = f'{monkey}_{session}_{block}_{seed}_{pert_start}.sh'
+				file_string = f'{monkey}_{session}_{block}_{seed}.sh'
 				with open (file_string, 'w') as rsh:
 					rsh.write('''#!/bin/bash''')
 					rsh.write("\n")
