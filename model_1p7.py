@@ -131,6 +131,7 @@ def get_probes(sim, net, params):
         'monkey':   [params['monkey']] * n_steps,
         'session':  [params['session']] * n_steps,
         'block':    [params['block']] * n_steps,
+        'pert':    [params['pert']] * n_steps,
         'time':     sim.trange()[::10],
         'va':       sim.data[net.p_v][::10, 0],
         'vb':       sim.data[net.p_v][::10, 1],
