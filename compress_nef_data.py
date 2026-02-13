@@ -3,92 +3,30 @@ import re
 import h5py
 from pathlib import Path
 
-def process_nef_data(folder_path="data/nef/", do_full=False, do_pert=False, do_spikes=True):
+def process_nef_data(folder_path="data/nef"):
     path = Path(folder_path)
-    
-    # Define output paths
-    output_pert = path / "nef_data_pert.pkl.xz"
-    output_full = path / "nef_data_full.pkl.xz"
-    output_num  = path / "nef_data.pkl.xz"
-    output_spikes = path / "nef_data_spikes.h5"
+    output_probes = path / "nef_data_probes.pkl.xz"
+    output_values  = path / "nef_data_values.pkl.xz"
 
-    # --- PART 1: Process "_full.pkl" files ---
-    if do_full:
-        full_files = list(path.glob("*_full.pkl"))
-        
-        if full_files:
-            print(f"Concatenating {len(full_files)} '_full.pkl' files...")
-            df_full = pd.concat((pd.read_pickle(f) for f in full_files), ignore_index=True)
-            
-            print(f"Compressing (xz) and saving to {output_full}...")
-            df_full.to_pickle(output_full, compression="xz")
-            
-            # Explicitly clear memory
-            del df_full 
-        else:
-            print("No '_full.pkl' files found.")
-
-    # --- PART 2: Process "(number).pkl" files ---
-    all_pkls = list(path.glob("*.pkl"))
-    num_files = [f for f in all_pkls if re.search(r'\d\.pkl$', str(f))]
-
-    if num_files:
-        print(f"\nConcatenating {len(num_files)} numbered '.pkl' files...")
-        df_num = pd.concat((pd.read_pickle(f) for f in num_files), ignore_index=True)
-        
-        print(f"Compressing (xz) and saving to {output_num}...")
-        df_num.to_pickle(output_num, compression="xz")
-        
-        del df_num
+    probe_files = list(path.glob("*_probes.pkl"))
+    if probe_files:
+        print(f"Concatenating {len(probe_files)} '_probes.pkl' files...")
+        df_probe = pd.concat((pd.read_pickle(f) for f in probe_files), ignore_index=True)
+        print(f"Compressing (xz) and saving to {output_probes}...")
+        df_probe.to_pickle(output_probes, compression="xz")
+        del df_probe 
     else:
-        print("No numbered '.pkl' files found.")
+        print("No '_probes.pkl' files found.")
 
-    # --- PART 3: Process "_pert.pkl" files ---
-    if do_pert:
-        pert_files = list(path.glob("*_pert.pkl"))
-        
-        if pert_files:
-            print(f"Concatenating {len(full_files)} '_pert.pkl' files...")
-            df_pert = pd.concat((pd.read_pickle(f) for f in pert_files), ignore_index=True)
-            
-            print(f"Compressing (xz) and saving to {output_pert}...")
-            df_pert.to_pickle(output_full, compression="xz")
-            
-            # Explicitly clear memory
-            del df_pert
-        else:
-            print("No '_pert.pkl' files found.")
-
-    # --- PART 4: Process HDF5 Spike Files ---
-    if do_spikes:
-        spike_files = list(path.glob("*.h5"))
-        if spike_files:
-            spike_files = [f for f in spike_files if f.name != output_spikes.name]
-            
-            if output_spikes.exists():
-                output_spikes.unlink()
-
-            print(f"\nMerging {len(spike_files)} files into hierarchical HDF5...")
-            with h5py.File(output_spikes, 'w') as master_h5:
-                for f_path in spike_files:
-                    parts = f_path.stem.split('_')
-                    
-                    if len(parts) == 5:
-                        m, sess, blk, seed, pert = parts
-                        # 1. Create the nested group structure manually
-                        # require_group ensures it's created if missing, or returned if it exists
-                        target_group = master_h5.require_group(f"{m}/{sess}/{blk}/{seed}/{pert}")
-                        
-                        with h5py.File(f_path, 'r') as source_h5:
-                            # 2. Copy each item FROM the source root TO the target group
-                            for name in source_h5.keys():
-                                if name in target_group:
-                                    del target_group[name] # Overwrite if exists
-                                source_h5.copy(name, target_group)
-                    else:
-                        print(f"Skipping {f_path.name}: Name format not recognized.")
-            
-            print(f"Hierarchical collection saved to {output_spikes}")
+    value_files = list(path.glob("*_values.pkl"))
+    if value_files:
+        print(f"Concatenating {len(value_files)} '_values.pkl' files...")
+        df_value = pd.concat((pd.read_pickle(f) for f in value_files), ignore_index=True)
+        print(f"Compressing (xz) and saving to {output_values}...")
+        df_value.to_pickle(output_values, compression="xz")
+        del df_value 
+    else:
+        print("No '_values.pkl' files found.")
 
     print("\nProcess complete.")
 
