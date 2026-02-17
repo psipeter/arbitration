@@ -471,7 +471,7 @@ def build_network(params):
         net.p_mask_learn = nengo.Probe(mask_learn, synapse=None)
         net.p_mask_decay = nengo.Probe(mask_decay, synapse=None)
         net.p_pert = nengo.Probe(pert, synapse=None)
-        # net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
         # net.s_a = nengo.Probe(a.neurons, synapse=params['tau_p'])
 
         net.cue = cue
