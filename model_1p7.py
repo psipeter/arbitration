@@ -113,6 +113,15 @@ def get_values(sim, net, params, trial):
         'vwa_l':sim.data[net.p_vwa][tidx,2],
         'vwa_r':sim.data[net.p_vwa][tidx,3],
         'vwa_w':sim.data[net.p_vwa][tidx,4],
+        'vapec':sim.data[net.p_evc][tidx,0],
+        'vbpec':sim.data[net.p_evc][tidx,1],
+        'vlpec':sim.data[net.p_evc][tidx,2],
+        'vrpec':sim.data[net.p_evc][tidx,3],
+        'vapeu':sim.data[net.p_evu][tidx,0],
+        'vbpeu':sim.data[net.p_evu][tidx,1],
+        'vlpeu':sim.data[net.p_evu][tidx,2],
+        'vrpeu':sim.data[net.p_evu][tidx,3],
+        'wpe':sim.data[net.p_ew][tidx,0],
         'al':sim.data[net.p_a][tidx,0],
         'ar':sim.data[net.p_a][tidx,1],
         'w':sim.data[net.p_w][tidx,0],
@@ -471,7 +480,8 @@ def build_network(params):
         net.p_mask_learn = nengo.Probe(mask_learn, synapse=None)
         net.p_mask_decay = nengo.Probe(mask_decay, synapse=None)
         net.p_pert = nengo.Probe(pert, synapse=None)
-        net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
+        # net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
         # net.s_a = nengo.Probe(a.neurons, synapse=params['tau_p'])
 
         net.cue = cue
@@ -488,7 +498,8 @@ if __name__ == "__main__":
     session = int(sys.argv[2])
     block = int(sys.argv[3])
     seed = int(sys.argv[4])
-    perts = [-0.2, -0.1, 0, 0.1, 0.2]
+    # perts = [-0.2, -0.1, 0, 0.1, 0.2]
+    perts = [0]
     config = 'random'
     start = time.time()
     values = []
