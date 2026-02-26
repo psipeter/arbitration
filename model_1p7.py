@@ -22,8 +22,8 @@ def simulate(monkey, session, block, seed, trials, config, pert):
             set_nodes('cue', net, params, trial, sim.data)
             sim.run(params['t_cue'])
             set_nodes('rew', net, params, trial, sim.data)
-            data_list.append(get_values(sim, net, params, trial))
             sim.run(params['t_rew'])
+            data_list.append(get_values(sim, net, params, trial))
     values = pd.DataFrame(data_list)
     probes = get_probes(sim, net, params)
     return values, probes, sim, net
@@ -97,6 +97,7 @@ def set_nodes(phase, net, params, trial, data):
 
 def get_values(sim, net, params, trial):
     tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
+    terr = int((-params['t_rew'] + 0.1)/0.001)  # timestep to measure error probes
     data = {
         'monkey':params['monkey'],
         'session':params['session'],
@@ -113,15 +114,15 @@ def get_values(sim, net, params, trial):
         'vwa_l':sim.data[net.p_vwa][tidx,2],
         'vwa_r':sim.data[net.p_vwa][tidx,3],
         'vwa_w':sim.data[net.p_vwa][tidx,4],
-        'vapec':sim.data[net.p_evc][tidx,0],
-        'vbpec':sim.data[net.p_evc][tidx,1],
-        'vlpec':sim.data[net.p_evc][tidx,2],
-        'vrpec':sim.data[net.p_evc][tidx,3],
-        'vapeu':sim.data[net.p_evu][tidx,0],
-        'vbpeu':sim.data[net.p_evu][tidx,1],
-        'vlpeu':sim.data[net.p_evu][tidx,2],
-        'vrpeu':sim.data[net.p_evu][tidx,3],
-        'wpe':sim.data[net.p_ew][tidx,0],
+        'vapec':sim.data[net.p_evc][terr,0],
+        'vbpec':sim.data[net.p_evc][terr,1],
+        'vlpec':sim.data[net.p_evc][terr,2],
+        'vrpec':sim.data[net.p_evc][terr,3],
+        'vapeu':sim.data[net.p_evu][terr,0],
+        'vbpeu':sim.data[net.p_evu][terr,1],
+        'vlpeu':sim.data[net.p_evu][terr,2],
+        'vrpeu':sim.data[net.p_evu][terr,3],
+        'wpe':sim.data[net.p_ew][terr,0],
         'al':sim.data[net.p_a][tidx,0],
         'ar':sim.data[net.p_a][tidx,1],
         'w':sim.data[net.p_w][tidx,0],
