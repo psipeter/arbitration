@@ -7,7 +7,7 @@ import time
 monkeys = ['V', 'W']
 sessions = range(4)
 blocks = range(1,25)
-seeds = range(3)
+seeds = range(5)
 for monkey in monkeys:
 	for session in sessions:
 		for block in blocks:
