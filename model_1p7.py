@@ -26,7 +26,8 @@ def simulate(monkey, session, block, seed, trials, config, pert):
             data_list.append(get_values(sim, net, params, trial))
     values = pd.DataFrame(data_list)
     probes = get_probes(sim, net, params)
-    return values, probes, sim, net
+    spikes = get_spikes(sim, net, params)
+    return values, probes, spikes, sim, net
 
 def get_params(monkey, session, block, seed, trials=80, config='random', pert=0):
     params = {
@@ -163,6 +164,13 @@ def get_probes(sim, net, params):
         'acc':      sim.data[net.p_rew][::10, 3],
     }
     return pd.DataFrame(data)
+
+def get_spikes(sim, net, params):
+    data = {
+        'vwa': sim.data[net.s_vwa][::10],
+        'a': sim.data[net.s_a][::10],
+    }
+    return data
 
 def build_network(params):
                 
@@ -487,9 +495,8 @@ def build_network(params):
         net.p_mask_learn = nengo.Probe(mask_learn, synapse=None)
         net.p_mask_decay = nengo.Probe(mask_decay, synapse=None)
         net.p_pert = nengo.Probe(pert, synapse=None)
-        # net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
-        net.s_vwa = nengo.Probe(vwa.neurons, synapse=None)
-        # net.s_a = nengo.Probe(a.neurons, synapse=params['tau_p'])
+        net.s_vwa = nengo.Probe(vwa.neurons, synapse=params['tau_p'])
+        net.s_a = nengo.Probe(a.neurons, synapse=params['tau_p'])
 
         net.cue = cue
         net.dec = dec
@@ -510,14 +517,19 @@ if __name__ == "__main__":
     config = 'random'
     start = time.time()
     values = []
-    probes = []
+    # probes = []
+    spikes = []
     for p in perts:
-        val, pro, sim, net = simulate(monkey, session, block, seed, 80, config, p)
+        val, pro, spk, sim, net = simulate(monkey, session, block, seed, 80, config, p)
         values.append(val)
-        probes.append(pro)
+        # probes.append(pro)
+        spikes.append(spk)
     df_values = pd.concat(values, ignore_index=True)
-    df_probes = pd.concat(probes, ignore_index=True)
+    # df_probes = pd.concat(probes, ignore_index=True)
     df_values.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_values.pkl")
-    df_probes.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_probes.pkl")
+    # df_probes.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_probes.pkl")
+    # todo: add perturbation support
+    np.savez_compressed(f'data/nef/{monkey}_{session}_{block}_{seed}_spikes_vwa.npz', spikes=spikes[0]['vwa'].astype(np.float16))
+    np.savez_compressed(f'data/nef/{monkey}_{session}_{block}_{seed}_spikes_a.npz', spikes=spikes[0]['a'].astype(np.float16))
     end = time.time()
     print(f"runtime (min): {(end-start)/60:.4}")
