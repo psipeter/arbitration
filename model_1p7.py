@@ -167,8 +167,13 @@ def get_probes(sim, net, params):
 
 def get_spikes(sim, net, params):
     data = {
-        'vwa': sim.data[net.s_vwa][::10],
-        'a': sim.data[net.s_a][::10],
+        'spikes_combined': sim.data[net.s_vwa][::10],
+        'spikes_action': sim.data[net.s_a][::10],
+        'values_a': sim.data[net.p_vwa][::10, 0],
+        'values_b': sim.data[net.p_vwa][::10, 1],
+        'values_l': sim.data[net.p_vwa][::10, 2],
+        'values_r': sim.data[net.p_vwa][::10, 3],
+        'values_w': sim.data[net.p_vwa][::10, 4],
     }
     return data
 
@@ -529,7 +534,7 @@ if __name__ == "__main__":
     df_values.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_values.pkl")
     # df_probes.to_pickle(f"data/nef/{monkey}_{session}_{block}_{seed}_probes.pkl")
     # todo: add perturbation support
-    np.savez_compressed(f'data/nef/{monkey}_{session}_{block}_{seed}_spikes_vwa.npz', spikes=spikes[0]['vwa'].astype(np.float16))
-    np.savez_compressed(f'data/nef/{monkey}_{session}_{block}_{seed}_spikes_a.npz', spikes=spikes[0]['a'].astype(np.float16))
+    for key, value in spikes[0].items():
+        np.savez_compressed(f'data/nef/{monkey}_{session}_{block}_{seed}_{key}.npz', data=value.astype(np.float16))
     end = time.time()
     print(f"runtime (min): {(end-start)/60:.4}")
