@@ -167,17 +167,16 @@ def get_probes(sim, net, params):
 
 def get_spikes(sim, net, params):
     data = {
-        'time': sim.trange()[::10],
-        'spikes_combined': sim.data[net.s_vwa][::10],
-        'spikes_action': sim.data[net.s_a][::10],
-        'values_a': sim.data[net.p_vwa][::10, 0],
-        'values_b': sim.data[net.p_vwa][::10, 1],
-        'values_l': sim.data[net.p_vwa][::10, 2],
-        'values_r': sim.data[net.p_vwa][::10, 3],
-        'values_w': sim.data[net.p_vwa][::10, 4],
-        'values_al': sim.data[net.p_a][::10, 0],
-        'values_ar': sim.data[net.p_a][::10, 1],
-        'decision': sim.data[net.p_dec][::10, 0],
+        'spikes_combined': sim.data[net.s_vwa][::20],
+        'spikes_action': sim.data[net.s_a][::20],
+        'values_a': sim.data[net.p_vwa][::20, 0],
+        'values_b': sim.data[net.p_vwa][::20, 1],
+        'values_l': sim.data[net.p_vwa][::20, 2],
+        'values_r': sim.data[net.p_vwa][::20, 3],
+        'values_w': sim.data[net.p_vwa][::20, 4],
+        'values_al': sim.data[net.p_a][::20, 0],
+        'values_ar': sim.data[net.p_a][::20, 1],
+        'decision': sim.data[net.p_dec][::20, 0],
     }
     return data
 
