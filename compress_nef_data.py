@@ -3,7 +3,7 @@ import re
 import h5py
 from pathlib import Path
 
-def process_nef_data(folder_path="data/nef/pert", do_probe=True):
+def process_nef_data(folder_path="data/nef", do_probe=False):
     path = Path(folder_path)
     output_probes = path / "nef_data_probes.pkl.xz"
     output_values  = path / "nef_data_values.pkl.xz"

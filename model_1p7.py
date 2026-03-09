@@ -23,6 +23,8 @@ def simulate(monkey, session, block, seed, trials, config, pert):
             sim.run(params['t_cue'])
             set_nodes('rew', net, params, trial, sim.data)
             sim.run(params['t_rew'])
+            set_nodes('reset', net, params, trial, sim.data)
+            sim.run(params['t_reset'])
             data_list.append(get_values(sim, net, params, trial))
     values = pd.DataFrame(data_list)
     probes = get_probes(sim, net, params)
@@ -43,6 +45,7 @@ def get_params(monkey, session, block, seed, trials=80, config='random', pert=0)
         't_iti':1.0,
         't_cue':1.0,
         't_rew':1.0,
+        't_reset':1.0,
         'p_rew':0.7,
         'r_let':0.6,
         'r_loc':0.3,
@@ -81,11 +84,9 @@ def get_params(monkey, session, block, seed, trials=80, config='random', pert=0)
 def set_nodes(phase, net, params, trial, data):
     if phase=='iti':
         net.cue.set(False, None)
-        net.mask_learn.set(False, None, None)
-        net.mask_decay.set(False, None, None)
         net.dec.set(False)
-        net.rew.set(False, None, None)
         net.pert.set()
+        net.reset.set(False)
     elif phase=='cue':
         net.cue.set(True, trial)
         net.dec.set(True)
@@ -95,10 +96,14 @@ def set_nodes(phase, net, params, trial, data):
         net.mask_decay.set(True, trial, action)
         net.rew.set(True, trial, action)
         net.pert.reset()
-
+    elif phase=='reset':
+        net.mask_learn.set(False, None, None)
+        net.mask_decay.set(False, None, None)
+        net.rew.set(False, None, None)
+        net.reset.set(True)
 def get_values(sim, net, params, trial):
     tidx = int(sim.data[net.p_dec][-1,3])  # timestep of decision
-    terr = int((-params['t_rew'] + 0.1)/0.001)  # timestep to measure error probes
+    terr = int((-params['t_reset'] - params['t_rew'] + 0.1)/0.001)  # timestep to measure error probes
     data = {
         'monkey':params['monkey'],
         'session':params['session'],
@@ -219,10 +224,11 @@ def build_network(params):
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
             self.t_rew = params['t_rew']
+            self.t_reset = params['t_reset']
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='cue')
         def step(self, t):
-            t_since_cue = t % (self.t_iti + self.t_cue + self.t_rew) - self.t_iti
+            t_since_cue = t % (self.t_iti + self.t_cue + self.t_rew + self.t_reset) - self.t_iti
             if t_since_cue < 0:
                 self.state[0] = self.thr
             elif t_since_cue > self.t_cue:
@@ -237,8 +243,8 @@ def build_network(params):
             self.t_cue = params['t_cue']
             self.t_iti = params['t_iti']
             self.t_rew = params['t_rew']
+            self.t_reset = params['t_reset']
             self.state = np.zeros((size_out))
-            self.t_dec = None
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='action')
         def set(self, go):
             self.go = go  # decision period has started
@@ -246,11 +252,11 @@ def build_network(params):
         def step(self, t, x):
             cL, cR = x[0], x[1]
             nonzero = np.abs(cL-cR) > 0.01
-            t_dec = t % (self.t_iti + self.t_cue + self.t_rew) - self.t_iti
-            if self.go and nonzero and self.state[0]==0 and t_dec>0.1:  # make a new choice once
+            t_since_cue = t % (self.t_iti + self.t_cue + self.t_rew + self.t_reset) - self.t_iti
+            if self.go and nonzero and self.state[0]==0 and t_since_cue>0.1:  # make a new choice once
                 if cL>cR: self.state[0] = 1
                 elif cR>cL: self.state[0] = -1
-                self.state[1] = t_dec  # decision (reaction) time
+                self.state[1] = t_since_cue  # decision (reaction) time
                 self.state[2] = 1  # some action has been chosen
                 self.state[3] = int(t/0.001)  # simulation timestep of decision
             return self.state
@@ -376,9 +382,6 @@ def build_network(params):
 
     class PertNode(nengo.Node):
         def __init__(self, params, size_in=1, size_out=1):
-            self.t_cue = params['t_cue']
-            self.t_iti = params['t_iti']
-            self.t_rew = params['t_rew']
             self.pert = params['pert']
             self.state = np.zeros((size_out))
             super().__init__(self.step, size_in=size_in, size_out=size_out, label='pert')
@@ -386,6 +389,15 @@ def build_network(params):
             self.state[0] = 0
         def set(self):
             self.state[0] = self.pert
+        def step(self, t, x):
+            return self.state
+
+    class ResetNode(nengo.Node):
+        def __init__(self, size_in=1, size_out=1):
+            self.state = np.zeros((size_out))
+            super().__init__(self.step, size_in=size_in, size_out=size_out, label='reset')
+        def set(self, reset):
+            self.state[0] = 1 if reset else 0
         def step(self, t, x):
             return self.state
 
@@ -405,6 +417,7 @@ def build_network(params):
         mask_chosen = MaskErrorNode()
         mask_unchosen = MaskErrorNode()
         pert = PertNode(params)  # perturbs w population: [w drive]
+        reset = ResetNode()  # inhibits all populations before next trial: [1/0]
         
         # ENSEMBLES
         f = nengo.Ensemble(params['neurons'], 2)  # letter value features
@@ -439,7 +452,6 @@ def build_network(params):
 
         # recurrently connect the action population so that it ramps at a rate proportional to the weighted values
         nengo.Connection(a, a, synapse=params['tau_fb'])  # action integrator
-        nengo.Connection(dec[2], a.neurons, transform=winh/1000, synapse=nengo.Alpha(params['tau_inh']))  # inhibition controls feedback if decision has been made
 
         # send ramping action values to a choice population that is under dynamic inhibition
         nengo.Connection(athr, ch, synapse=None, transform=[[-1],[-1]])  # send dynamic threshold to action population
@@ -471,6 +483,10 @@ def build_network(params):
         nengo.Connection(evu[2:], cloc.learning_rule, synapse=params['tau_ff'], transform=-params['gamma_v'])  # decay
         nengo.Connection(ew, cw.learning_rule, synapse=params['tau_ff'], transform=params['alpha_w'])  # omega learning
 
+        # RESET
+        # inhibition controls feedback if decision has been made
+        nengo.Connection(dec[2], a.neurons, transform=winh/1000, synapse=nengo.Alpha(params['tau_inh']))
+
         # inhibit learning and reset unless a reward is being delivered
         nengo.Connection(rew[1], evc.neurons, transform=winh, synapse=None)
         nengo.Connection(rew[1], evu.neurons, transform=winh, synapse=None)
@@ -480,14 +496,21 @@ def build_network(params):
         nengo.Connection(dec[2], v.neurons, transform=winh, synapse=None)  # decision inhibits value neurons
         nengo.Connection(rew[2], v.neurons, transform=-winh, synapse=None)  # decision excites value neurons, cancelling inhibition
 
-        # perturb omega representation by driving omega towards 1 or 0
-        nengo.Connection(pert, w, synapse=None)
+        # inhibit everything after reward but before start of the next trial
+        nengo.Connection(reset, v.neurons, transform=winh, synapse=None)
+        nengo.Connection(reset, vwa.neurons, transform=winh, synapse=None)
+        nengo.Connection(reset, a.neurons, transform=winh, synapse=None)
+        nengo.Connection(reset, evc.neurons, transform=winh, synapse=None)
+        nengo.Connection(reset, evu.neurons, transform=winh, synapse=None)
+        nengo.Connection(reset, ew.neurons, transform=winh, synapse=None)
+
+        # PERTURB
+        nengo.Connection(pert, w, synapse=None)  # perturb omega representation by driving omega towards 1 or 0
         
         # probes
         net.p_v = nengo.Probe(v, synapse=params['tau_p'])
         net.p_w = nengo.Probe(w, synapse=params['tau_p'])
         net.p_a = nengo.Probe(a, synapse=params['tau_p'])
-        # net.p_afb = nengo.Probe(afb, synapse=params['tau_p'])
         net.p_ch = nengo.Probe(ch, synapse=params['tau_p'])
         net.p_dec = nengo.Probe(dec, synapse=None)
         net.p_vlet = nengo.Probe(vlet, synapse=None)
@@ -495,7 +518,6 @@ def build_network(params):
         net.p_evc = nengo.Probe(evc, synapse=params['tau_p'])
         net.p_evu = nengo.Probe(evu, synapse=params['tau_p'])
         net.p_ew = nengo.Probe(ew, synapse=params['tau_p'])
-        # net.p_drel = nengo.Probe(drel, synapse=params['tau_p'])
         net.p_cue = nengo.Probe(cue, synapse=None)
         net.p_rew = nengo.Probe(rew, synapse=None)
         net.p_thr = nengo.Probe(athr, synapse=None)
@@ -512,6 +534,7 @@ def build_network(params):
         net.mask_learn = mask_learn
         net.mask_decay = mask_decay
         net.pert = pert
+        net.reset = reset
     
         return net
 
